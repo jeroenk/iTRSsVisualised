@@ -1,14 +1,21 @@
+import System.Random
+import Data.IORef
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
-import System.Random
+
+data ProgramState = State {
+        generator :: StdGen
+    }
 
 main :: IO ()
 main = do
+    gen <- newStdGen
+    state <- newIORef $ State gen
     (program_name, _) <- getArgsAndInitialize
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
     initialWindowSize $= Size 1000 500
     _ <- createWindow program_name
-    displayCallback $= display
+    displayCallback $= display state
     reshapeCallback $= Just reshape
     clearColor $= Color4 0.0 0.0 0.0 1.0
     depthFunc $= Just Less
@@ -38,16 +45,18 @@ reshape :: ReshapeCallback
 reshape (Size w h) = do
     windowSize $= Size w' h'
     viewport $= (Position 0 0, Size w' h')
+    postRedisplay Nothing
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
-display :: DisplayCallback
-display = do
+display :: (IORef ProgramState) -> DisplayCallback
+display state = do
     clear [ColorBuffer, DepthBuffer]
-    gen_1 <- newStdGen
-    let (r, gen_2) = randomR (0.0::Double, 1.0) gen_1
-        (g, gen_3) = randomR (0.0::Double, 1.0) gen_2
-        (b, _) = randomR (0.0::Double, 1.0) gen_3
+    st <- readIORef state
+    let (r, gen_1) = randomR (0.0::Double, 1.0) (generator st)
+        (g, gen_2) = randomR (0.0::Double, 1.0) gen_1
+        (b, gen_3) = randomR (0.0::Double, 1.0) gen_2
+    state $= State gen_3
     drawNode 10.5 pos (col r g b)
     flush
     swapBuffers
