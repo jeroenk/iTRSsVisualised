@@ -3,19 +3,25 @@ import Data.IORef
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
 
-data ProgramState = State {
-        generator :: StdGen
-    }
+import SignatureAndVariables
+import Terms
+import PositionsAndSubterms
+import qualified ExampleTerms
+
+import Array
+
+type SymColor s v = (Symbol s v, Color4 GLdouble)
 
 main :: IO ()
 main = do
     gen <- newStdGen
-    state <- newIORef $ State gen
+    gen_ref <- newIORef $ gen
+    col_ref <- newIORef []
     (program_name, _) <- getArgsAndInitialize
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
     initialWindowSize $= Size 1000 500
     _ <- createWindow program_name
-    displayCallback $= display state
+    displayCallback $= display ExampleTerms.f_k_omega gen_ref col_ref
     reshapeCallback $= Just reshape
     clearColor $= Color4 0.0 0.0 0.0 1.0
     depthFunc $= Just Less
@@ -33,13 +39,75 @@ node = do
         vertex $ Vertex3 (1.0::GLdouble) (-1.0) 0.0
         vertex $ Vertex3 (-1.0::GLdouble) (-1.0) 0.0
 
-drawNode :: GLdouble -> (Vector3 GLdouble) -> (Color4 GLdouble) -> IO ()
-drawNode size pos col = do
+getColor :: (Signature s, Variables v)
+     => Symbol s v -> (IORef StdGen) -> (IORef [SymColor s v])
+        -> IO (Color4 GLdouble)
+getColor symbol gen_ref col_ref = do
+    generator <- readIORef gen_ref
+    colors <- readIORef col_ref
+    let (col, colors', gen') = get_color symbol colors generator
+    gen_ref $= gen'
+    col_ref $= colors'
+    return col
+    where get_color sym [] gen
+              = (new_color, [(sym, new_color)], new_gen)
+                  where (new_color, new_gen) = get_new_color gen
+          get_color sym (c:cs) gen
+              | fst c == sym = (snd c, c:cs, gen)
+              | otherwise    = (c', c:cs', gen')
+                  where (c', cs', gen') = get_color sym cs gen
+          get_new_color gen
+              = (Color4 r_val g_val b_val 1.0, gen_3)
+                  where  (r, gen_1) = randomR (0.0, 1.0) gen
+                         (g, gen_2) = randomR (0.0, 1.0) gen_1
+                         (b, gen_3) = randomR (0.0, 1.0) gen_2
+                         r_val = (r + 1.0) / 2.0
+                         g_val = (g + 1.0) / 2.0
+                         b_val = (b + 1.0) / 2.0
+
+drawNode :: (Signature s, Variables v)
+    => Symbol s v -> GLdouble -> (Vector3 GLdouble) -> (IORef StdGen)
+       -> (IORef [SymColor s v]) -> IO ()
+drawNode symbol size location gen_ref col_ref = do
     unsafePreservingMatrix $ do
+        col <- getColor symbol gen_ref col_ref
         color col
-        translate pos
+        translate location
         scale size size size
         node
+
+get_subterms :: (Signature s, Variables v)
+    => (Term s v) -> [Term s v]
+get_subterms (Function _ ts) = elems ts
+get_subterms (Variable _)    = []
+
+drawSubterms :: (Signature s, Variables v)
+    => [Term s v] -> GLdouble -> GLdouble -> GLdouble -> GLdouble -> Int
+       -> (IORef StdGen) -> (IORef [SymColor s v]) -> IO ()
+drawSubterms [] _ _ _ _ _ _ _ = do
+    return ()
+drawSubterms (t:ts) left inc down depth depth_left gen_ref col_ref = do
+    drawTerm t left (left + inc) down depth depth_left gen_ref col_ref
+    drawSubterms ts (left + inc) inc down depth depth_left gen_ref col_ref
+
+drawTerm :: (Signature s, Variables v)
+    => (Term s v) -> GLdouble -> GLdouble -> GLdouble -> GLdouble -> Int
+       -> (IORef StdGen) -> (IORef [SymColor s v]) -> IO ()
+drawTerm term left right down depth depth_left gen_ref col_ref
+    | depth_left == 0 = do
+        return ()
+    | otherwise  = do
+        drawNode (get_symbol term []) size location gen_ref col_ref
+        drawSubterms subterms left' inc down' depth' depth_left' gen_ref col_ref
+        where left' = left + ((right - left) / 50.0)
+              right' = right - ((right - left) / 50.0)
+              location = Vector3 ((left' + right') / 2.0) depth 0.0
+              size = 10.0 / (11.0 - fromIntegral depth_left)
+              subterms = get_subterms term
+              inc = (right' - left') / (fromIntegral (length subterms))
+              depth_left' = depth_left - 1
+              down' = down / 1.5
+              depth' = depth + down
 
 reshape :: ReshapeCallback
 reshape (Size w h) = do
@@ -49,19 +117,12 @@ reshape (Size w h) = do
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
-display :: (IORef ProgramState) -> DisplayCallback
-display state = do
+display :: (Signature s, Variables v)
+    => (Term s v) -> (IORef StdGen) -> (IORef [SymColor s v]) -> DisplayCallback
+display term gen_ref col_ref = do
     clear [ColorBuffer, DepthBuffer]
-    st <- readIORef state
-    let (r, gen_1) = randomR (0.0::Double, 1.0) (generator st)
-        (g, gen_2) = randomR (0.0::Double, 1.0) gen_1
-        (b, gen_3) = randomR (0.0::Double, 1.0) gen_2
-    state $= State gen_3
-    drawNode 10.5 pos (col r g b)
+    drawTerm term 0.0 500.0 160.0 20.0 10 gen_ref col_ref
+    drawTerm term 500.0 750.0 (160.0 / 1.5) 20.0 9 gen_ref col_ref
+    drawTerm term 750.0 875.0 ((160.0 / 1.5) / 1.5) 20.0 8 gen_ref col_ref
     flush
     swapBuffers
-    where r_val r = (r + 1.0) / 2.0
-          g_val g = (g + 1.0) / 2.0
-          b_val b = (b + 1.0) / 2.0
-          col r g b = Color4 (r_val r) (g_val g) (b_val b) 1.0
-          pos = Vector3 400.0 150.0 0.0
