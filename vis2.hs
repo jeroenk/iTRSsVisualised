@@ -25,7 +25,8 @@ data PositionData
         left  :: GLdouble,
         right :: GLdouble,
         down  :: GLdouble,
-        depth :: GLdouble
+        depth :: GLdouble,
+        up    :: Maybe (Vector3 GLdouble)
       }
 
 data RelPositionData
@@ -33,7 +34,8 @@ data RelPositionData
         rel_left  :: GLdouble,
         rel_inc   :: GLdouble,
         rel_down  :: GLdouble,
-        rel_depth :: GLdouble
+        rel_depth :: GLdouble,
+        rel_up    :: Maybe (Vector3 GLdouble)
       }
 
 maximum_depth :: Int
@@ -48,7 +50,7 @@ main = do
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
     initialWindowSize $= Size 1000 500
     _ <- createWindow program_name
-    displayCallback $= display ExampleTerms.k_f_omega env
+    displayCallback $= display ExampleTerms.h_omega env
     reshapeCallback $= Just reshape
     clearColor $= Color4 0.0 0.0 0.0 1.0
     depthFunc $= Just Less
@@ -58,13 +60,47 @@ main = do
     matrixMode $= Modelview 0
     mainLoop
 
+arrow :: IO ()
+arrow = do
+    color $ Color4 (1.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
+    renderPrimitive Lines $ do
+        vertex $ Vertex3 (-2.0 :: GLdouble) 0.0 0.0
+        vertex $ Vertex3 (0.0 :: GLdouble) 0.0 0.0
+    unsafePreservingMatrix $ do
+        rotate (150.0 :: GLdouble) (Vector3 0.0 0.0 (-1.0))
+        renderPrimitive Lines $ do
+            vertex $ Vertex3 (0.0 :: GLdouble) 0.0 0.0
+            vertex $ Vertex3 (1.0 :: GLdouble) 0.0 0.0
+    unsafePreservingMatrix $ do
+        rotate (150.0 :: GLdouble) (Vector3 0.0 0.0 1.0)
+        renderPrimitive Lines $ do
+            vertex $ Vertex3 (0.0 :: GLdouble) 0.0 0.0
+            vertex $ Vertex3 (1.0 :: GLdouble) 0.0 0.0
+
+drawArrow :: GLdouble -> (Vector3 GLdouble) -> IO ()
+drawArrow size location = do
+    unsafePreservingMatrix $ do
+        translate location
+        scale size size size
+        arrow
+
+drawEdge :: (Maybe (Vector3 GLdouble)) -> (Vector3 GLdouble) -> IO ()
+drawEdge Nothing _ = do
+    return ()
+drawEdge (Just up_pos) down_pos = do
+    color $ Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 1.0 1.0
+    renderPrimitive Lines $ do
+        vertex $ to_vertex up_pos
+        vertex $ to_vertex down_pos
+    where to_vertex (Vector3 x y z) = Vertex3 x y (z - 0.5)
+
 node :: IO ()
 node = do
     renderPrimitive Quads $ do
-        vertex $ Vertex3 (-1.0::GLdouble) 1.0 0.0
-        vertex $ Vertex3 (1.0::GLdouble) 1.0 0.0
-        vertex $ Vertex3 (1.0::GLdouble) (-1.0) 0.0
-        vertex $ Vertex3 (-1.0::GLdouble) (-1.0) 0.0
+        vertex $ Vertex3 (-1.0 :: GLdouble) 1.0 0.0
+        vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
+        vertex $ Vertex3 (1.0 :: GLdouble) (-1.0) 0.0
+        vertex $ Vertex3 (-1.0 :: GLdouble) (-1.0) 0.0
 
 getColor :: (Signature s, Variables v)
      => Symbol s v -> (EnvironmentRef s v) -> IO (Color4 GLdouble)
@@ -117,7 +153,8 @@ drawSubterms (t:ts) rel_pos depth_left environment = do
               left = rel_left rel_pos,
               right = rel_left rel_pos + rel_inc rel_pos,
               down = rel_down rel_pos,
-              depth = rel_depth rel_pos
+              depth = rel_depth rel_pos,
+              up = rel_up rel_pos
             }
           -- drawSubterms call
           rel_pos_new = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
@@ -128,6 +165,7 @@ drawTerm term pos depth_left environment
     | depth_left == 0 = do
         return ()
     | otherwise  = do
+        drawEdge (up pos) location
         drawNode sym size location environment
         drawSubterms subterms rel_pos depth_left' environment
         where -- Shared data
@@ -143,7 +181,8 @@ drawTerm term pos depth_left environment
                   rel_left = left',
                   rel_inc = (right' - left') / (fromIntegral (length subterms)),
                   rel_down = down pos / 1.5,
-                  rel_depth = depth pos + down pos
+                  rel_depth = depth pos + down pos,
+                  rel_up = Just location
               }
               depth_left' = depth_left - 1
 
@@ -159,8 +198,11 @@ display :: (Signature s, Variables v)
     => (Term s v) -> (EnvironmentRef s v) -> DisplayCallback
 display term environment = do
     clear [ColorBuffer, DepthBuffer]
-    drawTerm term (Pos 0.0 500.0 160.0 20.0) maximum_depth environment
-    drawTerm term (Pos 500.0 750.0 (160.0 / 1.5) 20.0) (maximum_depth - 1) environment
-    drawTerm term (Pos 750.0 875.0 ((160.0 / 1.5) / 1.5) 20.0) (maximum_depth - 2) environment
+    drawTerm term (Pos 0.0 500.0 160.0 20.0 Nothing) maximum_depth environment
+    drawArrow (20.0 / 1.0) (Vector3 (500.0 - (500.0 / 50.0)) 20.0 0.0)
+    drawTerm term (Pos 500.0 750.0 (160.0 / 1.5) 20.0 Nothing) (maximum_depth - 1) environment
+    drawArrow (20.0 / 2.0) (Vector3 (750.0 - (250.0 / 50.0)) 20.0 0.0)
+    drawTerm term (Pos 750.0 875.0 ((160.0 / 1.5) / 1.5) 20.0 Nothing) (maximum_depth - 2) environment
+    drawArrow (20.0 / 3.0) (Vector3 (875.0 - (125.0 / 50.0)) 20.0 0.0)
     flush
     swapBuffers
