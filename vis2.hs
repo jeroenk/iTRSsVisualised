@@ -14,6 +14,7 @@ type SymbolColor s v = (Symbol s v, Color4 GLdouble)
 
 data (Signature s, Variables v) => Environment s v
     = Env {
+        env_term  :: Term s v,
         generator :: StdGen,
         colors    :: [SymbolColor s v]
       }
@@ -44,13 +45,16 @@ maximum_depth = 14
 main :: IO ()
 main = do
     gen <- newStdGen
-    let cols :: [SymbolColor ExampleTerms.Sigma ExampleTerms.Var] = []
-    env <- newIORef $ Env {generator = gen, colors = cols}
+    env <- newIORef $ Env {
+        env_term = ExampleTerms.h_omega,
+        generator = gen,
+        colors = []
+      }
     (program_name, _) <- getArgsAndInitialize
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
     initialWindowSize $= Size 1000 500
     _ <- createWindow program_name
-    displayCallback $= display ExampleTerms.h_omega env
+    displayCallback $= display env
     reshapeCallback $= Just reshape
     clearColor $= Color4 0.0 0.0 0.0 1.0
     depthFunc $= Just Less
@@ -107,7 +111,7 @@ getColor :: (Signature s, Variables v)
 getColor symbol environment = do
     env <- readIORef environment
     let (col, cols', gen') = get_color symbol (colors env) (generator env)
-    environment $= Env {generator = gen', colors = cols'}
+    environment $= env {generator = gen', colors = cols'}
     return col
     where get_color sym [] gen
               = (new_color, [(sym, new_color)], new_gen)
@@ -195,9 +199,11 @@ reshape (Size w h) = do
               h' = if (h * 2) > w then (w `div` 2) else h
 
 display :: (Signature s, Variables v)
-    => (Term s v) -> (EnvironmentRef s v) -> DisplayCallback
-display term environment = do
+    => (EnvironmentRef s v) -> DisplayCallback
+display environment = do
     clear [ColorBuffer, DepthBuffer]
+    env <- readIORef environment
+    let term = env_term env
     drawTerm term (Pos 0.0 500.0 160.0 20.0 Nothing) maximum_depth environment
     drawArrow (20.0 / 1.0) (Vector3 (500.0 - (500.0 / 50.0)) 20.0 0.0)
     drawTerm term (Pos 500.0 750.0 (160.0 / 1.5) 20.0 Nothing) (maximum_depth - 1) environment
