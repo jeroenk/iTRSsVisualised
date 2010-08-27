@@ -10,18 +10,45 @@ import qualified ExampleTerms
 
 import Array
 
-type SymColor s v = (Symbol s v, Color4 GLdouble)
+type SymbolColor s v = (Symbol s v, Color4 GLdouble)
+
+data (Signature s, Variables v) => Environment s v
+    = Env {
+        generator :: StdGen,
+        colors    :: [SymbolColor s v]
+      }
+
+type EnvironmentRef s v = IORef (Environment s v)
+
+data PositionData
+    = Pos {
+        left  :: GLdouble,
+        right :: GLdouble,
+        down  :: GLdouble,
+        depth :: GLdouble
+      }
+
+data RelPositionData
+    = RelPos {
+        rel_left  :: GLdouble,
+        rel_inc   :: GLdouble,
+        rel_down  :: GLdouble,
+        rel_depth :: GLdouble
+      }
+
+maximum_depth :: Int
+maximum_depth = 14
 
 main :: IO ()
 main = do
     gen <- newStdGen
-    gen_ref <- newIORef $ gen
-    col_ref <- newIORef []
+    let cols :: [SymbolColor ExampleTerms.Sigma ExampleTerms.Var] = []
+    env <- newIORef $ Env {generator = gen, colors = cols}
     (program_name, _) <- getArgsAndInitialize
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
     initialWindowSize $= Size 1000 500
     _ <- createWindow program_name
-    displayCallback $= display ExampleTerms.f_k_omega gen_ref col_ref
+    displayCallback $= display ExampleTerms.k_f_omega env
     reshapeCallback $= Just reshape
     clearColor $= Color4 0.0 0.0 0.0 1.0
     depthFunc $= Just Less
@@ -40,14 +67,11 @@ node = do
         vertex $ Vertex3 (-1.0::GLdouble) (-1.0) 0.0
 
 getColor :: (Signature s, Variables v)
-     => Symbol s v -> (IORef StdGen) -> (IORef [SymColor s v])
-        -> IO (Color4 GLdouble)
-getColor symbol gen_ref col_ref = do
-    generator <- readIORef gen_ref
-    colors <- readIORef col_ref
-    let (col, colors', gen') = get_color symbol colors generator
-    gen_ref $= gen'
-    col_ref $= colors'
+     => Symbol s v -> (EnvironmentRef s v) -> IO (Color4 GLdouble)
+getColor symbol environment = do
+    env <- readIORef environment
+    let (col, cols', gen') = get_color symbol (colors env) (generator env)
+    environment $= Env {generator = gen', colors = cols'}
     return col
     where get_color sym [] gen
               = (new_color, [(sym, new_color)], new_gen)
@@ -58,19 +82,19 @@ getColor symbol gen_ref col_ref = do
                   where (c', cs', gen') = get_color sym cs gen
           get_new_color gen
               = (Color4 r_val g_val b_val 1.0, gen_3)
-                  where  (r, gen_1) = randomR (0.0, 1.0) gen
-                         (g, gen_2) = randomR (0.0, 1.0) gen_1
-                         (b, gen_3) = randomR (0.0, 1.0) gen_2
-                         r_val = (r + 1.0) / 2.0
-                         g_val = (g + 1.0) / 2.0
-                         b_val = (b + 1.0) / 2.0
+                  where (r, gen_1) = randomR (0.0, 1.0) gen
+                        (g, gen_2) = randomR (0.0, 1.0) gen_1
+                        (b, gen_3) = randomR (0.0, 1.0) gen_2
+                        r_val = (r + 1.0) / 2.0
+                        g_val = (g + 1.0) / 2.0
+                        b_val = (b + 1.0) / 2.0
 
 drawNode :: (Signature s, Variables v)
-    => Symbol s v -> GLdouble -> (Vector3 GLdouble) -> (IORef StdGen)
-       -> (IORef [SymColor s v]) -> IO ()
-drawNode symbol size location gen_ref col_ref = do
+    => Symbol s v -> GLdouble -> (Vector3 GLdouble) -> (EnvironmentRef s v)
+       -> IO ()
+drawNode symbol size location environment = do
     unsafePreservingMatrix $ do
-        col <- getColor symbol gen_ref col_ref
+        col <- getColor symbol environment
         color col
         translate location
         scale size size size
@@ -82,32 +106,46 @@ get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
 drawSubterms :: (Signature s, Variables v)
-    => [Term s v] -> GLdouble -> GLdouble -> GLdouble -> GLdouble -> Int
-       -> (IORef StdGen) -> (IORef [SymColor s v]) -> IO ()
-drawSubterms [] _ _ _ _ _ _ _ = do
+    => [Term s v] -> RelPositionData -> Int -> (EnvironmentRef s v) -> IO ()
+drawSubterms [] _ _ _ = do
     return ()
-drawSubterms (t:ts) left inc down depth depth_left gen_ref col_ref = do
-    drawTerm t left (left + inc) down depth depth_left gen_ref col_ref
-    drawSubterms ts (left + inc) inc down depth depth_left gen_ref col_ref
+drawSubterms (t:ts) rel_pos depth_left environment = do
+    drawTerm t pos_new depth_left environment
+    drawSubterms ts rel_pos_new depth_left environment
+    where -- drawTerm call
+          pos_new = Pos {
+              left = rel_left rel_pos,
+              right = rel_left rel_pos + rel_inc rel_pos,
+              down = rel_down rel_pos,
+              depth = rel_depth rel_pos
+            }
+          -- drawSubterms call
+          rel_pos_new = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
 
 drawTerm :: (Signature s, Variables v)
-    => (Term s v) -> GLdouble -> GLdouble -> GLdouble -> GLdouble -> Int
-       -> (IORef StdGen) -> (IORef [SymColor s v]) -> IO ()
-drawTerm term left right down depth depth_left gen_ref col_ref
+    => (Term s v) -> PositionData -> Int -> (EnvironmentRef s v) -> IO ()
+drawTerm term pos depth_left environment
     | depth_left == 0 = do
         return ()
     | otherwise  = do
-        drawNode (get_symbol term []) size location gen_ref col_ref
-        drawSubterms subterms left' inc down' depth' depth_left' gen_ref col_ref
-        where left' = left + ((right - left) / 50.0)
-              right' = right - ((right - left) / 50.0)
-              location = Vector3 ((left' + right') / 2.0) depth 0.0
-              size = 10.0 / (11.0 - fromIntegral depth_left)
+        drawNode sym size location environment
+        drawSubterms subterms rel_pos depth_left' environment
+        where -- Shared data
+              left' = left pos + ((right pos - left pos) / 50.0)
+              right' = right pos - ((right pos - left pos) / 50.0)
+              -- drawNode call
+              sym = get_symbol term []
+              size = 10.0 / (fromIntegral (1 + maximum_depth - depth_left))
+              location = Vector3 ((left' + right') / 2.0) (depth pos) 0.0
+              -- drawSubterms call
               subterms = get_subterms term
-              inc = (right' - left') / (fromIntegral (length subterms))
+              rel_pos = RelPos {
+                  rel_left = left',
+                  rel_inc = (right' - left') / (fromIntegral (length subterms)),
+                  rel_down = down pos / 1.5,
+                  rel_depth = depth pos + down pos
+              }
               depth_left' = depth_left - 1
-              down' = down / 1.5
-              depth' = depth + down
 
 reshape :: ReshapeCallback
 reshape (Size w h) = do
@@ -118,11 +156,11 @@ reshape (Size w h) = do
               h' = if (h * 2) > w then (w `div` 2) else h
 
 display :: (Signature s, Variables v)
-    => (Term s v) -> (IORef StdGen) -> (IORef [SymColor s v]) -> DisplayCallback
-display term gen_ref col_ref = do
+    => (Term s v) -> (EnvironmentRef s v) -> DisplayCallback
+display term environment = do
     clear [ColorBuffer, DepthBuffer]
-    drawTerm term 0.0 500.0 160.0 20.0 10 gen_ref col_ref
-    drawTerm term 500.0 750.0 (160.0 / 1.5) 20.0 9 gen_ref col_ref
-    drawTerm term 750.0 875.0 ((160.0 / 1.5) / 1.5) 20.0 8 gen_ref col_ref
+    drawTerm term (Pos 0.0 500.0 160.0 20.0) maximum_depth environment
+    drawTerm term (Pos 500.0 750.0 (160.0 / 1.5) 20.0) (maximum_depth - 1) environment
+    drawTerm term (Pos 750.0 875.0 ((160.0 / 1.5) / 1.5) 20.0) (maximum_depth - 2) environment
     flush
     swapBuffers
