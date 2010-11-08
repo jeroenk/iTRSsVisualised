@@ -1,0 +1,1 @@
+ghc -XTypeSynonymInstances -package GLUT -Wall ../MyShow.hs ../SignatureAndVariables.hs ../Terms.hs ../PositionsAndSubterms.hs ../ExampleTerms.hs vis2.hs -o vis2
