@@ -10,7 +10,7 @@ import qualified ExampleTerms
 
 import Array
 
-type SymbolColor s v = (Symbol s v, Color4 GLdouble)
+type SymbolColor s v = (Symbol s v, Color4 GLfloat)
 
 data (Signature s, Variables v) => Environment s v
     = Env {
@@ -60,12 +60,19 @@ main = do
     depthFunc $= Just Less
     matrixMode $= Projection
     loadIdentity
-    ortho 0.0 1000.0 500.0 0.0 (-1.0) (1.0)
+    ortho 0.0 2000.0 1000.0 0.0 (-1.0) (1.0)
     matrixMode $= Modelview 0
+    blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
+    blend $= Enabled
+    lineSmooth $= Enabled
+    hint LineSmooth $= Nicest
+    -- multisample $= Enabled
     mainLoop
 
 arrow :: IO ()
 arrow = do
+    old_width <- get lineWidth
+    lineWidth $= 2.0
     color $ Color4 (1.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
     renderPrimitive Lines $ do
         vertex $ Vertex3 (-2.0 :: GLdouble) 0.0 0.0
@@ -80,6 +87,7 @@ arrow = do
         renderPrimitive Lines $ do
             vertex $ Vertex3 (0.0 :: GLdouble) 0.0 0.0
             vertex $ Vertex3 (1.0 :: GLdouble) 0.0 0.0
+    lineWidth $= old_width
 
 drawArrow :: GLdouble -> (Vector3 GLdouble) -> IO ()
 drawArrow size location = do
@@ -98,18 +106,19 @@ drawEdge (Just up_pos) down_pos = do
         vertex $ to_vertex down_pos
     where to_vertex (Vector3 x y z) = Vertex3 x y (z - 0.5)
 
-node :: IO ()
-node = do
-    renderPrimitive Quads $ do
-        vertex $ Vertex3 (-1.0 :: GLdouble) 1.0 0.0
-        vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
-        vertex $ Vertex3 (1.0 :: GLdouble) (-1.0) 0.0
+node :: (Color4 GLfloat) -> IO ()
+node col = do
+    color col
+    renderPrimitive TriangleStrip $ do
         vertex $ Vertex3 (-1.0 :: GLdouble) (-1.0) 0.0
+        vertex $ Vertex3 (-1.0 :: GLdouble) 1.0 0.0
+        vertex $ Vertex3 (1.0 :: GLdouble) (-1.0) 0.0
+        vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
 
 getColor :: (Signature s, Variables v)
-     => Symbol s v -> (EnvironmentRef s v) -> IO (Color4 GLdouble)
+     => Symbol s v -> (EnvironmentRef s v) -> IO (Color4 GLfloat)
 getColor symbol environment = do
-    env <- readIORef environment
+    env <- get environment
     let (col, cols', gen') = get_color symbol (colors env) (generator env)
     environment $= env {generator = gen', colors = cols'}
     return col
@@ -135,10 +144,9 @@ drawNode :: (Signature s, Variables v)
 drawNode symbol size location environment = do
     unsafePreservingMatrix $ do
         col <- getColor symbol environment
-        color col
         translate location
         scale size size size
-        node
+        node col
 
 get_subterms :: (Signature s, Variables v)
     => (Term s v) -> [Term s v]
@@ -170,14 +178,14 @@ drawTerm term pos depth_left environment
         return ()
     | otherwise  = do
         drawEdge (up pos) location
-        drawNode sym size location environment
         drawSubterms subterms rel_pos depth_left' environment
+        drawNode sym size location environment
         where -- Shared data
               left' = left pos + ((right pos - left pos) / 50.0)
               right' = right pos - ((right pos - left pos) / 50.0)
               -- drawNode call
               sym = get_symbol term []
-              size = 10.0 / (fromIntegral (1 + maximum_depth - depth_left))
+              size = 20.0 / (fromIntegral (1 + maximum_depth - depth_left))
               location = Vector3 ((left' + right') / 2.0) (depth pos) 0.0
               -- drawSubterms call
               subterms = get_subterms term
@@ -192,8 +200,8 @@ drawTerm term pos depth_left environment
 
 reshape :: ReshapeCallback
 reshape (Size w h) = do
-    windowSize $= Size w' h'
     viewport $= (Position 0 0, Size w' h')
+    windowSize $= Size w' h'
     postRedisplay Nothing
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
@@ -202,13 +210,13 @@ display :: (Signature s, Variables v)
     => (EnvironmentRef s v) -> DisplayCallback
 display environment = do
     clear [ColorBuffer, DepthBuffer]
-    env <- readIORef environment
+    env <- get environment
     let term = env_term env
-    drawTerm term (Pos 0.0 500.0 160.0 20.0 Nothing) maximum_depth environment
-    drawArrow (20.0 / 1.0) (Vector3 (500.0 - (500.0 / 50.0)) 20.0 0.0)
-    drawTerm term (Pos 500.0 750.0 (160.0 / 1.5) 20.0 Nothing) (maximum_depth - 1) environment
-    drawArrow (20.0 / 2.0) (Vector3 (750.0 - (250.0 / 50.0)) 20.0 0.0)
-    drawTerm term (Pos 750.0 875.0 ((160.0 / 1.5) / 1.5) 20.0 Nothing) (maximum_depth - 2) environment
-    drawArrow (20.0 / 3.0) (Vector3 (875.0 - (125.0 / 50.0)) 20.0 0.0)
+    drawTerm term (Pos 0.0 1000.0 320.0 40.0 Nothing) maximum_depth environment
+    drawArrow (40.0 / 1.0) (Vector3 (1000.0 - (1000.0 / 50.0)) 40.0 0.0)
+    drawTerm term (Pos 1000.0 1500.0 (320.0 / 1.5) 40.0 Nothing) (maximum_depth - 1) environment
+    drawArrow (40.0 / 2.0) (Vector3 (1500.0 - (500.0 / 50.0)) 40.0 0.0)
+    drawTerm term (Pos 1500.0 1750.0 ((320.0 / 1.5) / 1.5) 40.0 Nothing) (maximum_depth - 2) environment
+    drawArrow (40.0 / 3.0) (Vector3 (1750.0 - (250.0 / 50.0)) 40.0 0.0)
     flush
     swapBuffers
