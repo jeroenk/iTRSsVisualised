@@ -6,7 +6,7 @@ import Graphics.UI.GLUT
 import SignatureAndVariables
 import Terms
 import PositionsAndSubterms
-import qualified ExampleTerms
+import qualified ExampleTermsAndSubstitutions
 
 import Array
 
@@ -46,7 +46,7 @@ main :: IO ()
 main = do
     gen <- newStdGen
     env <- newIORef $ Env {
-        env_term = ExampleTerms.h_omega,
+        env_term = ExampleTermsAndSubstitutions.h_omega,
         generator = gen,
         colors = []
       }
