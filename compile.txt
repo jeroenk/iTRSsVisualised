@@ -1,1 +1,3 @@
 ghc -XTypeSynonymInstances -XMultiParamTypeClasses -package GLUT -Wall ../MyShow.hs ../SignatureAndVariables.hs ../Terms.hs ../PositionsAndSubterms.hs ../Substitutions.hs ../ExampleTermsAndSubstitutions.hs ../RulesAndSystems.hs ../OmegaReductions.hs ../ExampleRulesAndSystems.hs ExampleReductions.hs vis2.hs -o vis2
+
+ghc -i.. --make -XTypeSynonymInstances -XMultiParamTypeClasses -package GLUT -Wall vis2.hs -o vis2
