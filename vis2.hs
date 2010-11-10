@@ -1,5 +1,6 @@
 import System.Random
 import Data.IORef
+import Control.Monad
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
 
@@ -16,9 +17,13 @@ type SymbolColor s v = (Symbol s v, Color4 GLfloat)
 
 data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
     = Env {
+        win_size  :: Size,
         env_red   :: CReduction s v r,
         generator :: StdGen,
-        colors    :: [SymbolColor s v]
+        colors    :: [SymbolColor s v],
+        mouse_use :: Bool,
+        init_pos  :: Position,
+        cur_pos   :: Position
       }
 
 type EnvironmentRef s v r = IORef (Environment s v r)
@@ -58,16 +63,22 @@ main :: IO ()
 main = do
     gen <- newStdGen
     env <- newIORef $ Env {
+        win_size  = Size 1000 500,
         env_red   = c_red_1,
         generator = gen,
-        colors    = []
+        colors    = [],
+        mouse_use = False,
+        init_pos  = Position 0 0,
+        cur_pos   = Position 0 0
       }
     (program_name, _) <- getArgsAndInitialize
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
     initialWindowSize $= Size 1000 500
     _ <- createWindow program_name
     displayCallback $= display env
-    reshapeCallback $= Just reshape
+    reshapeCallback $= Just (reshape env)
+    keyboardMouseCallback $= Just (keyboardMouse env)
+    motionCallback $= Just (motion env)
     clearColor $= Color4 0.0 0.0 0.0 1.0
     depthFunc $= Just Less
     matrixMode $= Projection
@@ -236,13 +247,58 @@ drawTerms (s:ss) pos environment
                       count = count pos + 1
                     }
 
-reshape :: ReshapeCallback
-reshape (Size w h) = do
+drawMouseSquare :: Bool -> Position -> Position -> Size -> IO ()
+drawMouseSquare True (Position x y) (Position x' y') (Size w h) = do
+    unsafePreservingMatrix $ do
+        color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
+        renderPrimitive LineLoop $ do
+            vertex $ Vertex3 x_new  y_new  0.0
+            vertex $ Vertex3 x_new  y_new' 0.0
+            vertex $ Vertex3 x_new' y_new' 0.0
+            vertex $ Vertex3 x_new' y_new  0.0
+        where x_new   = fromIntegral x * x_scale :: GLdouble
+              y_new   = fromIntegral y * y_scale :: GLdouble
+              x_new'  = fromIntegral x' * x_scale :: GLdouble
+              y_new'  = fromIntegral y' * y_scale :: GLdouble
+              x_scale = 2000.0 / fromIntegral w
+              y_scale = 1000.0 / fromIntegral h
+drawMouseSquare False _ _ _ = do
+    return ()
+
+reshape :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> ReshapeCallback
+reshape environment (Size w h) = do
+    env <- get environment
+    environment $= env {win_size = Size w' h'}
     viewport $= (Position 0 0, Size w' h')
     windowSize $= Size w' h'
     postRedisplay Nothing
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
+
+keyboardMouse :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> KeyboardMouseCallback
+keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
+    env <- get environment
+    environment $= env {mouse_use = True, init_pos = pos, cur_pos = pos}
+    postRedisplay Nothing
+keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
+    env <- get environment
+    environment $= env {mouse_use = False}
+    postRedisplay Nothing
+keyboardMouse _ _ _ _ _ = do
+    return ()
+
+motion :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> MotionCallback
+motion environment (Position x y) = do
+    env <- get environment
+    let mouse = mouse_use env
+    let (Size w h) = win_size env
+    when mouse $ environment $= env {cur_pos = Position (x' w) (y' h)}
+    postRedisplay Nothing
+        where x' w = max 0 (min x w)
+              y' h = max 0 (min y h)
 
 display :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> DisplayCallback
@@ -251,5 +307,6 @@ display environment = do
     env <- get environment
     let terms = get_terms (env_red env)
     drawTerms terms (TermPos 0.0 1000.0 0) environment
+    drawMouseSquare (mouse_use env) (init_pos env) (cur_pos env) (win_size env)
     flush
     swapBuffers
