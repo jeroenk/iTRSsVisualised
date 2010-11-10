@@ -6,7 +6,7 @@ import Graphics.UI.GLUT
 
 import SignatureAndVariables
 import Terms
-import PositionsAndSubterms
+import PositionsAndSubterms hiding (pos)
 import RulesAndSystems
 import OmegaReductions
 import ExampleReductions
