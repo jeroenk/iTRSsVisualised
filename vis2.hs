@@ -6,20 +6,22 @@ import Graphics.UI.GLUT
 import SignatureAndVariables
 import Terms
 import PositionsAndSubterms
-import qualified ExampleTermsAndSubstitutions
+import RulesAndSystems
+import OmegaReductions
+import ExampleReductions
 
 import Array
 
 type SymbolColor s v = (Symbol s v, Color4 GLfloat)
 
-data (Signature s, Variables v) => Environment s v
+data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
     = Env {
-        env_term  :: Term s v,
+        env_red   :: CReduction s v r,
         generator :: StdGen,
         colors    :: [SymbolColor s v]
       }
 
-type EnvironmentRef s v = IORef (Environment s v)
+type EnvironmentRef s v r = IORef (Environment s v r)
 
 data PositionData
     = Pos {
@@ -46,9 +48,9 @@ main :: IO ()
 main = do
     gen <- newStdGen
     env <- newIORef $ Env {
-        env_term = ExampleTermsAndSubstitutions.h_omega,
+        env_red   = c_red_1,
         generator = gen,
-        colors = []
+        colors    = []
       }
     (program_name, _) <- getArgsAndInitialize
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
@@ -115,8 +117,8 @@ node col = do
         vertex $ Vertex3 (1.0 :: GLdouble) (-1.0) 0.0
         vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
 
-getColor :: (Signature s, Variables v)
-     => Symbol s v -> (EnvironmentRef s v) -> IO (Color4 GLfloat)
+getColor :: (Signature s, Variables v, RewriteSystem s v r)
+     => Symbol s v -> (EnvironmentRef s v r) -> IO (Color4 GLfloat)
 getColor symbol environment = do
     env <- get environment
     let (col, cols', gen') = get_color symbol (colors env) (generator env)
@@ -138,8 +140,8 @@ getColor symbol environment = do
                         g_val = (g + 1.0) / 2.0
                         b_val = (b + 1.0) / 2.0
 
-drawNode :: (Signature s, Variables v)
-    => Symbol s v -> GLdouble -> (Vector3 GLdouble) -> (EnvironmentRef s v)
+drawNode :: (Signature s, Variables v, RewriteSystem s v r)
+    => Symbol s v -> GLdouble -> (Vector3 GLdouble) -> (EnvironmentRef s v r)
        -> IO ()
 drawNode symbol size location environment = do
     unsafePreservingMatrix $ do
@@ -153,8 +155,8 @@ get_subterms :: (Signature s, Variables v)
 get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
-drawSubterms :: (Signature s, Variables v)
-    => [Term s v] -> RelPositionData -> Int -> (EnvironmentRef s v) -> IO ()
+drawSubterms :: (Signature s, Variables v, RewriteSystem s v r)
+    => [Term s v] -> RelPositionData -> Int -> (EnvironmentRef s v r) -> IO ()
 drawSubterms [] _ _ _ = do
     return ()
 drawSubterms (t:ts) rel_pos depth_left environment = do
@@ -171,8 +173,8 @@ drawSubterms (t:ts) rel_pos depth_left environment = do
           -- drawSubterms call
           rel_pos_new = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
 
-drawTerm :: (Signature s, Variables v)
-    => (Term s v) -> PositionData -> Int -> (EnvironmentRef s v) -> IO ()
+drawTerm :: (Signature s, Variables v, RewriteSystem s v r)
+    => (Term s v) -> PositionData -> Int -> (EnvironmentRef s v r) -> IO ()
 drawTerm term pos depth_left environment
     | depth_left == 0 = do
         return ()
@@ -206,17 +208,17 @@ reshape (Size w h) = do
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
-display :: (Signature s, Variables v)
-    => (EnvironmentRef s v) -> DisplayCallback
+display :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> DisplayCallback
 display environment = do
     clear [ColorBuffer, DepthBuffer]
     env <- get environment
-    let term = env_term env
-    drawTerm term (Pos 0.0 1000.0 320.0 40.0 Nothing) maximum_depth environment
+    let terms = get_terms (env_red env)
+    drawTerm (terms!!0) (Pos 0.0 1000.0 320.0 40.0 Nothing) maximum_depth environment
     drawArrow (40.0 / 1.0) (Vector3 (1000.0 - (1000.0 / 50.0)) 40.0 0.0)
-    drawTerm term (Pos 1000.0 1500.0 (320.0 / 1.5) 40.0 Nothing) (maximum_depth - 1) environment
+    drawTerm (terms!!1) (Pos 1000.0 1500.0 (320.0 / 1.5) 40.0 Nothing) (maximum_depth - 1) environment
     drawArrow (40.0 / 2.0) (Vector3 (1500.0 - (500.0 / 50.0)) 40.0 0.0)
-    drawTerm term (Pos 1500.0 1750.0 ((320.0 / 1.5) / 1.5) 40.0 Nothing) (maximum_depth - 2) environment
+    drawTerm (terms!!2) (Pos 1500.0 1750.0 ((320.0 / 1.5) / 1.5) 40.0 Nothing) (maximum_depth - 2) environment
     drawArrow (40.0 / 3.0) (Vector3 (1750.0 - (250.0 / 50.0)) 40.0 0.0)
     flush
     swapBuffers
