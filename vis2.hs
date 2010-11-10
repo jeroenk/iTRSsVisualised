@@ -23,6 +23,13 @@ data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
 
 type EnvironmentRef s v r = IORef (Environment s v r)
 
+data TermPosData
+    = TermPos {
+        left_pos :: GLdouble,
+        width    :: GLdouble,
+        count    :: Int
+      }
+
 data PositionData
     = Pos {
         left  :: GLdouble,
@@ -43,6 +50,9 @@ data RelPositionData
 
 maximum_depth :: Int
 maximum_depth = 14
+
+maximum_terms :: Int
+maximum_terms = 7
 
 main :: IO ()
 main = do
@@ -68,7 +78,6 @@ main = do
     blend $= Enabled
     lineSmooth $= Enabled
     hint LineSmooth $= Nicest
-    -- multisample $= Enabled
     mainLoop
 
 arrow :: IO ()
@@ -200,6 +209,33 @@ drawTerm term pos depth_left environment
               }
               depth_left' = depth_left - 1
 
+drawTerms :: (Signature s, Variables v, RewriteSystem s v r)
+    => [Term s v] -> TermPosData -> (EnvironmentRef s v r) -> IO ()
+drawTerms [] _ _ = do
+    return ()
+drawTerms (s:ss) pos environment
+    | count pos == maximum_terms = do
+        return ()
+    | otherwise = do
+        drawTerm s term_pos (maximum_depth - count pos) environment
+        drawArrow arrow_size (Vector3 arrow_pos 40.0 0.0)
+        drawTerms ss pos_new environment
+            where right_pos = left_pos pos + width pos
+                  arrow_size = 40.0 / fromIntegral (2 + count pos)
+                  arrow_pos = right_pos - ((2000.0 - right_pos) / 50.0)
+                  term_pos = Pos {
+                      left = left_pos pos,
+                      right = right_pos,
+                      down = 320.0 / (1.5^(count pos)),
+                      depth = 40.0,
+                      up = Nothing
+                    }
+                  pos_new = TermPos {
+                      left_pos = right_pos,
+                      width = (width pos) / 2,
+                      count = count pos + 1
+                    }
+
 reshape :: ReshapeCallback
 reshape (Size w h) = do
     viewport $= (Position 0 0, Size w' h')
@@ -214,11 +250,6 @@ display environment = do
     clear [ColorBuffer, DepthBuffer]
     env <- get environment
     let terms = get_terms (env_red env)
-    drawTerm (terms!!0) (Pos 0.0 1000.0 320.0 40.0 Nothing) maximum_depth environment
-    drawArrow (40.0 / 1.0) (Vector3 (1000.0 - (1000.0 / 50.0)) 40.0 0.0)
-    drawTerm (terms!!1) (Pos 1000.0 1500.0 (320.0 / 1.5) 40.0 Nothing) (maximum_depth - 1) environment
-    drawArrow (40.0 / 2.0) (Vector3 (1500.0 - (500.0 / 50.0)) 40.0 0.0)
-    drawTerm (terms!!2) (Pos 1500.0 1750.0 ((320.0 / 1.5) / 1.5) 40.0 Nothing) (maximum_depth - 2) environment
-    drawArrow (40.0 / 3.0) (Vector3 (1750.0 - (250.0 / 50.0)) 40.0 0.0)
+    drawTerms terms (TermPos 0.0 1000.0 0) environment
     flush
     swapBuffers
