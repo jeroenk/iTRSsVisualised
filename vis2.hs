@@ -3,13 +3,15 @@ import Data.IORef
 import Control.Monad
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
+import System.Plugins hiding (Symbol)
 
 import SignatureAndVariables
 import Terms
 import PositionsAndSubterms hiding (pos)
 import RulesAndSystems
 import OmegaReductions
-import ExampleReductions
+import ExampleTermsAndSubstitutions hiding (b, c)
+import ExampleRulesAndSystems
 
 import Array
 
@@ -59,12 +61,29 @@ maximum_depth = 14
 maximum_terms :: Int
 maximum_terms = 7
 
+init_win_size :: Size
+init_win_size = Size 1000 500
+
+loadReduction :: String -> IO (CReduction Sigma Var System_a_f_x)
+--    (Signature s, Variables v, RewriteSystem s v r)
+--    => String -> IO (CReduction s v r)
+loadReduction s = do
+    make_stat <- make (s ++ ".hs") ["-i.."]
+    case make_stat of
+        MakeFailure err -> error $ show (head err)
+        MakeSuccess _ _ -> return ()
+    load_stat <- load (s ++ ".o") [".."] [] "c_red_1"
+    case load_stat of
+        LoadFailure err -> error $ show (head err)
+        LoadSuccess _ v -> return v
+
 main :: IO ()
 main = do
+    red <- loadReduction "ExampleReductions"
     gen <- newStdGen
     env <- newIORef $ Env {
-        win_size  = Size 1000 500,
-        env_red   = c_red_1,
+        win_size  = init_win_size,
+        env_red   = red,
         generator = gen,
         colors    = [],
         mouse_use = False,
@@ -73,7 +92,7 @@ main = do
       }
     (program_name, _) <- getArgsAndInitialize
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
-    initialWindowSize $= Size 1000 500
+    initialWindowSize $= init_win_size
     _ <- createWindow program_name
     displayCallback $= display env
     reshapeCallback $= Just (reshape env)
@@ -232,7 +251,7 @@ drawTerms (s:ss) pos environment
         drawArrow arrow_size (Vector3 arrow_pos 40.0 0.0)
         drawTerms ss pos_new environment
             where right_pos = left_pos pos + width pos
-                  arrow_size = 40.0 / fromIntegral (2 + count pos)
+                  arrow_size = 40.0 / 2.0^(count pos)
                   arrow_pos = right_pos - ((2000.0 - right_pos) / 50.0)
                   term_pos = Pos {
                       left = left_pos pos,
@@ -285,6 +304,10 @@ keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
 keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
     environment $= env {mouse_use = False}
+    -- matrixMode $= Projection
+    -- loadIdentity
+    -- ortho 1750.0 2000.0 125.0 0.0 (-1.0) (1.0)
+    -- matrixMode $= Modelview 0
     postRedisplay Nothing
 keyboardMouse _ _ _ _ _ = do
     return ()
@@ -295,9 +318,21 @@ motion environment (Position x y) = do
     env <- get environment
     let mouse = mouse_use env
     let (Size w h) = win_size env
-    when mouse $ environment $= env {cur_pos = Position (x' w) (y' h)}
+    let (Position x_int y_int) = init_pos env
+    when mouse $ environment $= env {cur_pos = pos x_int (x' w) y_int (y' h)}
     postRedisplay Nothing
-        where x' w = max 0 (min x w)
+        where pos x_int x_cur y_int y_cur = Position x_new y_new
+                  where x_new
+                            | x_cur >= x_int = x_int + w_new
+                            | otherwise   = x_int - w_new
+                        y_new
+                            | y_cur >= y_int = y_int + h_new
+                            | otherwise   = y_int - h_new
+                        w_new = if (h' * 2) > w' then w' else (h' * 2)
+                        h_new = if (h' * 2) > w' then (w' `div` 2) else h'
+                        w' = abs (x_cur - x_int)
+                        h' = abs (y_cur - y_int)
+              x' w = max 0 (min x w)
               y' h = max 0 (min y h)
 
 display :: (Signature s, Variables v, RewriteSystem s v r)
