@@ -1,4 +1,4 @@
-module ExampleReductions (
+module ExampleReduction (
     c_reduction
 ) where
 

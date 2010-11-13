@@ -77,7 +77,7 @@ loadReduction s = do
 
 main :: IO ()
 main = do
-    red <- loadReduction "ExampleReductions"
+    red <- loadReduction "ExampleReduction"
     gen <- newStdGen
     env <- newIORef $ Env {
         win_size  = init_win_size,
