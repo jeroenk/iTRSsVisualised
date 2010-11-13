@@ -1,9 +1,13 @@
-import System.Random
-import Data.IORef
+module Main where
+
+import Codec.Image.STB
 import Control.Monad
+import Data.Bitmap.OpenGL
+import Data.IORef
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
 import System.Plugins hiding (Symbol)
+import System.Random
 
 import SignatureAndVariables
 import Terms
@@ -62,6 +66,13 @@ maximum_terms = 7
 init_win_size :: Size
 init_win_size = Size 1000 500
 
+loadNodeTexture :: IO TextureObject
+loadNodeTexture = do
+    stat <- loadImage "node.png"
+    case stat of
+        Left err  -> error $ "loadNode: " ++ err
+        Right img -> makeSimpleBitmapTexture img
+
 loadReduction :: String -> IO (CReduction DynamicSigma DynamicVar DynamicSystem)
 loadReduction s = do
     make_stat <- make (s ++ ".hs") ["-i.."]
@@ -77,6 +88,13 @@ loadReduction s = do
 
 main :: IO ()
 main = do
+    -- Initialise window
+    (program_name, _) <- getArgsAndInitialize
+    initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
+    initialWindowSize $= init_win_size
+    _ <- createWindow program_name
+
+    -- Initialise environment
     red <- loadReduction "ExampleReduction"
     gen <- newStdGen
     env <- newIORef $ Env {
@@ -88,10 +106,8 @@ main = do
         init_pos  = Position 0 0,
         cur_pos   = Position 0 0
       }
-    (program_name, _) <- getArgsAndInitialize
-    initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
-    initialWindowSize $= init_win_size
-    _ <- createWindow program_name
+
+    -- Initialize callbacks, projections, and texture
     displayCallback $= display env
     reshapeCallback $= Just (reshape env)
     keyboardMouseCallback $= Just (keyboardMouse env)
@@ -106,6 +122,8 @@ main = do
     blend $= Enabled
     lineSmooth $= Enabled
     hint LineSmooth $= Nicest
+    tex <- loadNodeTexture
+    textureBinding Texture2D $= Just tex
     mainLoop
 
 arrow :: IO ()
@@ -148,11 +166,17 @@ drawEdge (Just up_pos) down_pos = do
 node :: (Color4 GLfloat) -> IO ()
 node col = do
     color col
+    texture Texture2D $= Enabled
     renderPrimitive TriangleStrip $ do
+        texCoord $ TexCoord2 (0.0 :: GLdouble) 0.0
         vertex $ Vertex3 (-1.0 :: GLdouble) (-1.0) 0.0
+        texCoord $ TexCoord2 (0.0 :: GLdouble) 1.0
         vertex $ Vertex3 (-1.0 :: GLdouble) 1.0 0.0
+        texCoord $ TexCoord2 (1.0 :: GLdouble) 0.0
         vertex $ Vertex3 (1.0 :: GLdouble) (-1.0) 0.0
+        texCoord $ TexCoord2 (1.0 :: GLdouble) 1.0
         vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
+    texture Texture2D $= Disabled
 
 getColor :: (Signature s, Variables v, RewriteSystem s v r)
      => Symbol s v -> (EnvironmentRef s v r) -> IO (Color4 GLfloat)
@@ -224,7 +248,7 @@ drawTerm term pos depth_left environment
               right' = right pos - ((right pos - left pos) / 50.0)
               -- drawNode call
               sym = get_symbol term []
-              size = 20.0 / (fromIntegral (1 + maximum_depth - depth_left))
+              size = 20.0 / 1.4^(maximum_depth - depth_left)
               location = Vector3 ((left' + right') / 2.0) (depth pos) 0.0
               -- drawSubterms call
               subterms = get_subterms term
