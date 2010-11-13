@@ -10,8 +10,6 @@ import Terms
 import PositionsAndSubterms hiding (pos)
 import RulesAndSystems
 import OmegaReductions
-import ExampleTermsAndSubstitutions hiding (b, c)
-import ExampleRulesAndSystems
 
 import Array
 
@@ -64,18 +62,18 @@ maximum_terms = 7
 init_win_size :: Size
 init_win_size = Size 1000 500
 
-loadReduction :: String -> IO (CReduction Sigma Var System_a_f_x)
---    (Signature s, Variables v, RewriteSystem s v r)
---    => String -> IO (CReduction s v r)
+loadReduction :: String -> IO (CReduction DynamicSigma DynamicVar DynamicSystem)
 loadReduction s = do
     make_stat <- make (s ++ ".hs") ["-i.."]
     case make_stat of
-        MakeFailure err -> error $ show (head err)
+        MakeFailure err -> error $ to_string err
         MakeSuccess _ _ -> return ()
-    load_stat <- load (s ++ ".o") [".."] [] "c_red_1"
+    load_stat <- load (s ++ ".o") [".."] [] "c_reduction"
     case load_stat of
-        LoadFailure err -> error $ show (head err)
+        LoadFailure err -> error $ to_string err
         LoadSuccess _ v -> return v
+        where to_string []     = ""
+              to_string (x:xs) = x ++ "\n" ++ to_string xs
 
 main :: IO ()
 main = do
@@ -102,7 +100,7 @@ main = do
     depthFunc $= Just Less
     matrixMode $= Projection
     loadIdentity
-    ortho 0.0 2000.0 1000.0 0.0 (-1.0) (1.0)
+    ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
     matrixMode $= Modelview 0
     blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
     blend $= Enabled
