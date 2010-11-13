@@ -88,14 +88,14 @@ loadReduction s = do
 
 main :: IO ()
 main = do
-    -- Initialise window
-    (program_name, _) <- getArgsAndInitialize
-    initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
-    initialWindowSize $= init_win_size
-    _ <- createWindow program_name
+    -- Initialize environment
+    (program_name, args) <- getArgsAndInitialize
 
-    -- Initialise environment
-    red <- loadReduction "ExampleReduction"
+    red_file <- case args of
+        [fn] -> return fn
+        _    -> error $ "usage: " ++ program_name ++ " <reduction>"
+
+    red <- loadReduction red_file
     gen <- newStdGen
     env <- newIORef $ Env {
         win_size  = init_win_size,
@@ -107,7 +107,10 @@ main = do
         cur_pos   = Position 0 0
       }
 
-    -- Initialize callbacks, projections, and texture
+    -- Initialize window, callbacks, projections, and texture
+    initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
+    initialWindowSize $= init_win_size
+    _ <- createWindow program_name
     displayCallback $= display env
     reshapeCallback $= Just (reshape env)
     keyboardMouseCallback $= Just (keyboardMouse env)
