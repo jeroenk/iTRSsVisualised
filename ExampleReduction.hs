@@ -36,7 +36,7 @@ rule_f_x_to_g_x = Rule f_x g_x
 
 reduction :: Reduction DynamicSigma DynamicVar DynamicSystem
 reduction = RConst ts (zip ps rs)
-    where ps = [2]:(map (\p -> p ++ [1,1]) ps)
+    where ps = [2]:(map (\p -> p ++ [1, 1]) ps)
           rs = rule_f_x_to_g_x:rs
           ts = rewrite_steps h_f_f_omega (zip ps rs)
 

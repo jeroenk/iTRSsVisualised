@@ -83,8 +83,7 @@ loadReduction s = do
     case load_stat of
         LoadFailure err -> error $ to_string err
         LoadSuccess _ v -> return v
-        where to_string []     = ""
-              to_string (x:xs) = x ++ "\n" ++ to_string xs
+        where to_string = foldr (\ x y -> x ++ "\n" ++ y) ""
 
 main :: IO ()
 main = do
@@ -296,10 +295,10 @@ drawMouseSquare True (Position x y) (Position x' y') (Size w h) = do
     unsafePreservingMatrix $ do
         color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
         renderPrimitive LineLoop $ do
-            vertex $ Vertex3 x_new  y_new  0.0
-            vertex $ Vertex3 x_new  y_new' 0.0
-            vertex $ Vertex3 x_new' y_new' 0.0
-            vertex $ Vertex3 x_new' y_new  0.0
+            vertex $ Vertex3 x_new  y_new  0.5
+            vertex $ Vertex3 x_new  y_new' 0.5
+            vertex $ Vertex3 x_new' y_new' 0.5
+            vertex $ Vertex3 x_new' y_new  0.5
         where x_new   = fromIntegral x * x_scale :: GLdouble
               y_new   = fromIntegral y * y_scale :: GLdouble
               x_new'  = fromIntegral x' * x_scale :: GLdouble
