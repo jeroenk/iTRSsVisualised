@@ -2,10 +2,10 @@ module ExampleReduction (
     c_reduction
 ) where
 
-import SignatureAndVariables
 import RulesAndSystems
 import Terms
 import OmegaReductions
+import DynamicOmegaReductions
 
 f :: DynamicSigma
 f = DynamicFun "f" 1

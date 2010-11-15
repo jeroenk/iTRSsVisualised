@@ -14,6 +14,7 @@ import Terms
 import PositionsAndSubterms hiding (pos)
 import RulesAndSystems
 import OmegaReductions
+import DynamicOmegaReductions
 
 import Array
 
