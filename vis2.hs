@@ -24,9 +24,11 @@ type SymbolColor s v = (Symbol s v, Color4 GLfloat)
 
 data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
     = Env {
-        win_size  :: Size,
         env_red   :: CReduction s v r,
+        cur_depth :: Int,
+        max_depth :: Int,
         generator :: StdGen,
+        win_size  :: Size,
         colors    :: [SymbolColor s v],
         mouse_use :: Bool,
         init_pos  :: Position,
@@ -61,10 +63,10 @@ data RelPositionData
       }
 
 maximum_depth :: Int
-maximum_depth = 14
+maximum_depth = 40
 
 maximum_terms :: Int
-maximum_terms = 7
+maximum_terms = 10
 
 init_win_size :: Size
 init_win_size = Size 1000 500
@@ -100,9 +102,11 @@ main = do
     red <- loadReduction red_file
     gen <- newStdGen
     env <- newIORef $ Env {
-        win_size  = init_win_size,
         env_red   = red,
+        cur_depth = 0,
+        max_depth = maximum_depth,
         generator = gen,
+        win_size  = init_win_size,
         colors    = [],
         mouse_use = False,
         init_pos  = Position 0 0,
@@ -117,6 +121,7 @@ main = do
     reshapeCallback $= Just (reshape env)
     keyboardMouseCallback $= Just (keyboardMouse env)
     motionCallback $= Just (motion env)
+    addTimerCallback 10 (timer env)
     clearColor $= Color4 0.0 0.0 0.0 1.0
     depthFunc $= Just Less
     matrixMode $= Projection
@@ -222,12 +227,13 @@ get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
 drawSubterms :: (Signature s, Variables v, RewriteSystem s v r)
-    => [Term s v] -> RelPositionData -> Int -> (EnvironmentRef s v r) -> IO ()
-drawSubterms [] _ _ _ = do
+    => [Term s v] -> RelPositionData -> Int -> Int -> (EnvironmentRef s v r)
+       -> IO ()
+drawSubterms [] _ _ _ _ = do
     return ()
-drawSubterms (t:ts) rel_pos depth_left environment = do
-    drawTerm t pos_new depth_left environment
-    drawSubterms ts rel_pos_new depth_left environment
+drawSubterms (t:ts) rel_pos depth_left depth_max environment = do
+    drawTerm t pos_new depth_left depth_max environment
+    drawSubterms ts rel_pos_new depth_left depth_max environment
     where -- drawTerm call
           pos_new = Pos {
               left = rel_left rel_pos,
@@ -240,20 +246,21 @@ drawSubterms (t:ts) rel_pos depth_left environment = do
           rel_pos_new = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
 
 drawTerm :: (Signature s, Variables v, RewriteSystem s v r)
-    => (Term s v) -> PositionData -> Int -> (EnvironmentRef s v r) -> IO ()
-drawTerm term pos depth_left environment
-    | depth_left == 0 = do
+    => (Term s v) -> PositionData -> Int -> Int -> (EnvironmentRef s v r)
+       -> IO ()
+drawTerm term pos depth_left depth_max environment
+    | depth_left <= 0 = do
         return ()
     | otherwise  = do
         drawEdge (up pos) location
-        drawSubterms subterms rel_pos depth_left' environment
+        drawSubterms subterms rel_pos depth_left' depth_max environment
         drawNode sym size location environment
         where -- Shared data
               left' = left pos + ((right pos - left pos) / 50.0)
               right' = right pos - ((right pos - left pos) / 50.0)
               -- drawNode call
               sym = get_symbol term []
-              size = 20.0 / 1.4^(maximum_depth - depth_left)
+              size = 20.0 / 1.4^(depth_max - depth_left)
               location = Vector3 ((left' + right') / 2.0) (depth pos) 0.0
               -- drawSubterms call
               subterms = get_subterms term
@@ -267,16 +274,18 @@ drawTerm term pos depth_left environment
               depth_left' = depth_left - 1
 
 drawTerms :: (Signature s, Variables v, RewriteSystem s v r)
-    => [Term s v] -> TermPosData -> (EnvironmentRef s v r) -> IO ()
-drawTerms [] _ _ = do
+    => [Term s v] -> TermPosData -> Int -> (EnvironmentRef s v r) -> IO ()
+drawTerms [] _ _ _ = do
     return ()
-drawTerms (s:ss) pos environment
-    | count pos == maximum_terms = do
+drawTerms (s:ss) pos max_terms environment
+    | max_terms == 0 = do
         return ()
     | otherwise = do
-        drawTerm s term_pos (maximum_depth - count pos) environment
+        env <- get environment
+        let m = max_depth env
+        drawTerm s term_pos (m - count pos) m environment
         drawArrow arrow_size (Vector3 arrow_pos 40.0 0.0)
-        drawTerms ss pos_new environment
+        drawTerms ss pos_new (max_terms - 1) environment
             where right_pos = left_pos pos + width pos
                   arrow_size = 40.0 / 2.0^(count pos)
                   arrow_pos = right_pos - ((2000.0 - right_pos) / 50.0)
@@ -362,13 +371,25 @@ motion environment (Position x y) = do
               x' w = max 0 (min x w)
               y' h = max 0 (min y h)
 
+timer ::  (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> IO ()
+timer environment = do
+    env <- get environment
+    let m = max_depth env
+    let d = cur_depth env
+    environment $= env {cur_depth = if d < m then d + 1 else d}
+    when (d < m) $ postRedisplay Nothing
+    when (d < m) $ addTimerCallback 10 (timer environment)
+
 display :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> DisplayCallback
 display environment = do
     clear [ColorBuffer, DepthBuffer]
     env <- get environment
     let terms = get_terms (env_red env)
-    drawTerms terms (TermPos 0.0 1000.0 0) environment
+    let phi = get_modulus (env_red env)
+    let max_terms = min maximum_terms (phi $ cur_depth env)
+    drawTerms terms (TermPos 0.0 1000.0 0) max_terms environment
     drawMouseSquare (mouse_use env) (init_pos env) (cur_pos env) (win_size env)
     flush
     swapBuffers
