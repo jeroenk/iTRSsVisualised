@@ -13,7 +13,7 @@ import System.Random
 
 import SignatureAndVariables
 import Terms
-import PositionsAndSubterms hiding (pos)
+import PositionsAndSubterms hiding (Position, pos)
 import RulesAndSystems
 import OmegaReductions
 import DynamicOmegaReductions
@@ -29,6 +29,8 @@ data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
         max_depth :: Int,
         generator :: StdGen,
         win_size  :: Size,
+        vis_up    :: (GLdouble, GLdouble),
+        vis_down  :: (GLdouble, GLdouble),
         colors    :: [SymbolColor s v],
         mouse_use :: Bool,
         init_pos  :: Position,
@@ -88,18 +90,20 @@ loadReduction s = do
     case load_stat of
         LoadFailure err -> error $ to_string err
         LoadSuccess _ v -> return v
-        where to_string = foldr (\ x y -> x ++ "\n" ++ y) ""
+        where to_string = foldr (\x y -> x ++ "\n" ++ y) ""
 
 main :: IO ()
 main = do
     -- Initialize environment
     (program_name, args) <- getArgsAndInitialize
 
-    red_file <- case args of
-        [fn] -> return fn
+    reduction_file <- case args of
+        [fn] -> return (if   drop (length fn - 3) fn == ".hs"
+                        then take (length fn - 3) fn
+                        else fn)
         _    -> error $ "usage: " ++ program_name ++ " <reduction>"
 
-    red <- loadReduction red_file
+    red <- loadReduction reduction_file
     gen <- newStdGen
     env <- newIORef $ Env {
         env_red   = red,
@@ -107,33 +111,43 @@ main = do
         max_depth = maximum_depth,
         generator = gen,
         win_size  = init_win_size,
+        vis_up    = (0.0, 0.0),
+        vis_down  = (2000.0, 1000.0),
         colors    = [],
         mouse_use = False,
         init_pos  = Position 0 0,
         cur_pos   = Position 0 0
       }
 
-    -- Initialize window, callbacks, projections, and texture
+    -- Initialize window
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
-    initialWindowSize $= init_win_size
+    initialWindowSize  $= init_win_size
     _ <- createWindow program_name
-    displayCallback $= display env
-    reshapeCallback $= Just (reshape env)
+
+    -- Initialize callbacks
+    displayCallback       $= display env
+    reshapeCallback       $= Just (reshape env)
     keyboardMouseCallback $= Just (keyboardMouse env)
-    motionCallback $= Just (motion env)
+    motionCallback        $= Just (motion env)
     addTimerCallback 10 (timer env)
+
+    -- Initialize projections and blending
     clearColor $= Color4 0.0 0.0 0.0 1.0
-    depthFunc $= Just Less
+    depthFunc  $= Just Less
     matrixMode $= Projection
     loadIdentity
     ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
     matrixMode $= Modelview 0
-    blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
-    blend $= Enabled
+    blendFunc  $= (SrcAlpha, OneMinusSrcAlpha)
+    blend      $= Enabled
     lineSmooth $= Enabled
     hint LineSmooth $= Nicest
+
+    -- Initialize texture
     tex <- loadNodeTexture
     textureBinding Texture2D $= Just tex
+
+    -- Main loop
     mainLoop
 
 arrow :: IO ()
@@ -302,8 +316,8 @@ drawTerms (s:ss) pos max_terms environment
                       count = count pos + 1
                     }
 
-drawMouseSquare :: Bool -> Position -> Position -> Size -> IO ()
-drawMouseSquare True (Position x y) (Position x' y') (Size w h) = do
+drawMouseSquare :: Bool -> (Position, Position) -> ((GLdouble, GLdouble), (GLdouble, GLdouble)) -> Size -> IO ()
+drawMouseSquare True (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) = do
     unsafePreservingMatrix $ do
         color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
         renderPrimitive LineLoop $ do
@@ -311,12 +325,12 @@ drawMouseSquare True (Position x y) (Position x' y') (Size w h) = do
             vertex $ Vertex3 x_new  y_new' 0.5
             vertex $ Vertex3 x_new' y_new' 0.5
             vertex $ Vertex3 x_new' y_new  0.5
-        where x_new   = fromIntegral x * x_scale :: GLdouble
-              y_new   = fromIntegral y * y_scale :: GLdouble
-              x_new'  = fromIntegral x' * x_scale :: GLdouble
-              y_new'  = fromIntegral y' * y_scale :: GLdouble
-              x_scale = 2000.0 / fromIntegral w
-              y_scale = 1000.0 / fromIntegral h
+        where x_new   = v + fromIntegral x * x_scale :: GLdouble
+              y_new   = w + fromIntegral y * y_scale :: GLdouble
+              x_new'  = v + fromIntegral x' * x_scale :: GLdouble
+              y_new'  = w + fromIntegral y' * y_scale :: GLdouble
+              x_scale = (v' - v) / fromIntegral p
+              y_scale = (w' - w) / fromIntegral q
 drawMouseSquare False _ _ _ = do
     return ()
 
@@ -331,6 +345,14 @@ reshape environment (Size w h) = do
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
+calc_pos (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) = if x == x' && y == y then (v, w, v', w') else (x_new, y_new, x_new', y_new')
+    where x_new   = v + fromIntegral x * x_scale :: GLdouble
+          y_new   = w + fromIntegral y * y_scale :: GLdouble
+          x_new'  = v + fromIntegral x' * x_scale :: GLdouble
+          y_new'  = w + fromIntegral y' * y_scale :: GLdouble
+          x_scale = (v' - v) / fromIntegral p
+          y_scale = (w' - w) / fromIntegral q
+
 keyboardMouse :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> KeyboardMouseCallback
 keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
@@ -339,11 +361,28 @@ keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
     postRedisplay Nothing
 keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
-    environment $= env {mouse_use = False}
-    -- matrixMode $= Projection
-    -- loadIdentity
-    -- ortho 1750.0 2000.0 125.0 0.0 (-1.0) (1.0)
-    -- matrixMode $= Modelview 0
+    let (x_new, y_new, x_new', y_new') = calc_pos (init_pos env, cur_pos env) (vis_up env, vis_down env) (win_size env)
+    let x = min x_new x_new'
+    let y = min y_new y_new'
+    let x' = max x_new x_new'
+    let y' = max y_new y_new'
+    environment $= env {mouse_use = False,
+                        vis_up = (x, y),
+                        vis_down = (x', y')}
+    matrixMode $= Projection
+    loadIdentity
+    ortho x x' y' y (-1.0) 1.0
+    matrixMode $= Modelview 0
+    postRedisplay Nothing
+keyboardMouse environment (MouseButton RightButton) Up _ _ = do
+    env <- get environment
+    environment $= env {mouse_use = False,
+                        vis_up    = (0.0, 0.0),
+                        vis_down  = (2000.0, 1000.0)}
+    matrixMode $= Projection
+    loadIdentity
+    ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
+    matrixMode $= Projection
     postRedisplay Nothing
 keyboardMouse _ _ _ _ _ = do
     return ()
@@ -360,10 +399,10 @@ motion environment (Position x y) = do
         where pos x_int x_cur y_int y_cur = Position x_new y_new
                   where x_new
                             | x_cur >= x_int = x_int + w_new
-                            | otherwise   = x_int - w_new
+                            | otherwise      = x_int - w_new
                         y_new
                             | y_cur >= y_int = y_int + h_new
-                            | otherwise   = y_int - h_new
+                            | otherwise      = y_int - h_new
                         w_new = if (h' * 2) > w' then w' else (h' * 2)
                         h_new = if (h' * 2) > w' then (w' `div` 2) else h'
                         w' = abs (x_cur - x_int)
@@ -390,6 +429,6 @@ display environment = do
     let phi = get_modulus (env_red env)
     let max_terms = min maximum_terms (phi $ cur_depth env)
     drawTerms terms (TermPos 0.0 1000.0 0) max_terms environment
-    drawMouseSquare (mouse_use env) (init_pos env) (cur_pos env) (win_size env)
+    drawMouseSquare (mouse_use env) (init_pos env, cur_pos env) (vis_up env, vis_down env) (win_size env)
     flush
     swapBuffers
