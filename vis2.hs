@@ -12,11 +12,11 @@ import System.Plugins hiding (Symbol)
 import System.Random
 
 import SignatureAndVariables
-import Terms
-import PositionsAndSubterms hiding (Position, pos)
-import RulesAndSystems
-import OmegaReductions
-import DynamicOmegaReductions
+import Term
+import PositionAndSubterm hiding (Position, pos)
+import RuleAndSystem
+import OmegaReduction
+import DynamicOmegaReduction
 
 import Array
 

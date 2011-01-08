@@ -2,10 +2,10 @@ module ExampleReduction (
     c_reduction
 ) where
 
-import RulesAndSystems
-import Terms
-import OmegaReductions
-import DynamicOmegaReductions
+import RuleAndSystem
+import Term
+import OmegaReduction
+import DynamicOmegaReduction
 
 f :: DynamicSigma
 f = DynamicFun "f" 1
@@ -35,10 +35,10 @@ rule_f_x_to_g_x :: RewriteRule DynamicSigma DynamicVar
 rule_f_x_to_g_x = Rule f_x g_x
 
 reduction :: Reduction DynamicSigma DynamicVar DynamicSystem
-reduction = RConst ts (zip ps rs)
+reduction = RCons ts (zip ps rs)
     where ps = [2]:(map (\p -> p ++ [1, 1]) ps)
           rs = rule_f_x_to_g_x:rs
           ts = rewrite_steps h_f_f_omega (zip ps rs)
 
 c_reduction :: CReduction DynamicSigma DynamicVar DynamicSystem
-c_reduction = CRConst reduction (\x -> succ x)
+c_reduction = CRCons reduction (\x -> succ x)
