@@ -10,7 +10,6 @@ import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
 import System.Plugins hiding (Symbol)
 import System.Random
-import System.Exit
 
 import SignatureAndVariables
 import Term
@@ -68,6 +67,9 @@ maximum_depth = 7
 
 maximum_terms :: Int
 maximum_terms = 8
+
+maximum_reduction_depth :: Int
+maximum_reduction_depth = 150
 
 init_win_size :: Size
 init_win_size = Size 1000 500
@@ -315,13 +317,15 @@ drawTerms (s:ss) slice (l_min, u_max) max_terms term_depth environment
         drawArrow arrow_size arrow_loc
         drawTerm s pos (vis_ul env) (vis_dr env) term_depth environment
         drawTerms ss slice' (l_min, u_max) max_terms' term_depth' environment
-        where left_side   = slice_left slice
+        where start_depth = 50.0
+              left_side   = slice_left slice
               right_side  = left_side + width
               width       = slice_width slice
+              margin      = width * 0.025
               max_depth   = slice_depth slice
               max_terms'  = max_terms - 1
               term_depth' = max 2 (term_depth - 1)
-              arrow_loc   = Vector3 right_side 50.0 0.0
+              arrow_loc   = Vector3 right_side start_depth 0.0
               arrow_size  = slice_arrow slice
               slice' = SlicePos {
                   slice_left  = right_side,
@@ -330,16 +334,27 @@ drawTerms (s:ss) slice (l_min, u_max) max_terms term_depth environment
                   slice_arrow = arrow_size / 2.0
                   }
               pos = Pos {
-                  left  = left_side + width * 0.025,
-                  right = right_side - width * 0.025,
-                  depth = 50.0,
+                  left  = left_side + margin,
+                  right = right_side - margin,
+                  depth = start_depth,
                   up    = Nothing
                   }
 
+calc_pos :: (Position, Position) -> ((GLdouble, GLdouble), (GLdouble, GLdouble))
+       -> Size -> Bool -> (GLdouble, GLdouble, GLdouble, GLdouble)
+calc_pos (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) zoom
+    | x == x' && y == y && zoom = (v, w, v', w')
+    | otherwise = (x_new, y_new, x_new', y_new')
+        where x_new   = v + fromIntegral x * x_scale  :: GLdouble
+              y_new   = w + fromIntegral y * y_scale  :: GLdouble
+              x_new'  = v + fromIntegral x' * x_scale :: GLdouble
+              y_new'  = w + fromIntegral y' * y_scale :: GLdouble
+              x_scale = (v' - v) / fromIntegral p
+              y_scale = (w' - w) / fromIntegral q
+
 drawMouseSquare :: Bool -> (Position, Position)
-                   -> ((GLdouble, GLdouble), (GLdouble, GLdouble)) -> Size
-                   -> IO ()
-drawMouseSquare True (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) = do
+       -> ((GLdouble, GLdouble), (GLdouble, GLdouble)) -> Size -> IO ()
+drawMouseSquare True poses vis size = do
     unsafePreservingMatrix $ do
         color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
         renderPrimitive LineLoop $ do
@@ -347,12 +362,7 @@ drawMouseSquare True (Position x y, Position x' y') ((v, w), (v', w')) (Size p q
             vertex $ Vertex3 x_new  y_new' 0.5
             vertex $ Vertex3 x_new' y_new' 0.5
             vertex $ Vertex3 x_new' y_new  0.5
-        where x_new   = v + fromIntegral x * x_scale :: GLdouble
-              y_new   = w + fromIntegral y * y_scale :: GLdouble
-              x_new'  = v + fromIntegral x' * x_scale :: GLdouble
-              y_new'  = w + fromIntegral y' * y_scale :: GLdouble
-              x_scale = (v' - v) / fromIntegral p
-              y_scale = (w' - w) / fromIntegral q
+        where (x_new, y_new, x_new', y_new') = calc_pos poses vis size False
 drawMouseSquare False _ _ _ = do
     return ()
 
@@ -361,23 +371,11 @@ reshape :: (Signature s, Variables v, RewriteSystem s v r)
 reshape environment (Size w h) = do
     env <- get environment
     environment $= env {win_size = Size w' h'}
-    viewport $= (Position 0 0, Size w' h')
-    windowSize $= Size w' h'
+    viewport    $= (Position 0 0, Size w' h')
+    windowSize  $= Size w' h'
     postRedisplay Nothing
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
-
-calc_pos :: (Position, Position) -> ((GLdouble, GLdouble), (GLdouble, GLdouble))
-            -> Size -> (GLdouble, GLdouble, GLdouble, GLdouble)
-calc_pos (Position x y, Position x' y') ((v, w), (v', w')) (Size p q)
-    | x == x' && y == y = (v, w, v', w')
-    | otherwise = (x_new, y_new, x_new', y_new')
-        where x_new   = v + fromIntegral x * x_scale  :: GLdouble
-              y_new   = w + fromIntegral y * y_scale  :: GLdouble
-              x_new'  = v + fromIntegral x' * x_scale :: GLdouble
-              y_new'  = w + fromIntegral y' * y_scale :: GLdouble
-              x_scale = (v' - v) / fromIntegral p
-              y_scale = (w' - w) / fromIntegral q
 
 keyboardMouse :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> KeyboardMouseCallback
@@ -387,28 +385,30 @@ keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
     postRedisplay Nothing
 keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
-    let (x_new, y_new, x_new', y_new') = calc_pos (init_pos env, cur_pos env) (vis_ul env, vis_dr env) (win_size env)
-    let x = min x_new x_new'
-    let y = min y_new y_new'
-    let x' = max x_new x_new'
-    let y' = max y_new y_new'
+    let poses = (init_pos env, cur_pos env)
+        vis   = (vis_ul env, vis_dr env)
+    let (x_new, y_new, x_new', y_new') = calc_pos poses vis (win_size env) True
+        x  = min x_new x_new'
+        y  = min y_new y_new'
+        x' = max x_new x_new'
+        y' = max y_new y_new'
     environment $= env {mouse_use = False,
                         vis_ul    = (x, y),
                         vis_dr    = (x', y')}
-    matrixMode $= Projection
+    matrixMode  $= Projection
     loadIdentity
     ortho x x' y' y (-1.0) 1.0
-    matrixMode $= Modelview 0
+    matrixMode  $= Modelview 0
     postRedisplay Nothing
 keyboardMouse environment (MouseButton RightButton) Up _ _ = do
     env <- get environment
     environment $= env {mouse_use = False,
                         vis_ul    = (0.0, 0.0),
                         vis_dr    = (2000.0, 1000.0)}
-    matrixMode $= Projection
+    matrixMode  $= Projection
     loadIdentity
     ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
-    matrixMode $= Projection
+    matrixMode  $= Projection
     postRedisplay Nothing
 keyboardMouse _ _ _ _ _ = do
     return ()
@@ -417,9 +417,9 @@ motion :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> MotionCallback
 motion environment (Position x y) = do
     env <- get environment
-    let mouse = mouse_use env
-    let (Size w h) = win_size env
-    let (Position x_int y_int) = init_pos env
+    let mouse                  = mouse_use env
+        (Size w h)             = win_size env
+        (Position x_int y_int) = init_pos env
     when mouse $ environment $= env {cur_pos = pos x_int (x' w) y_int (y' h)}
     postRedisplay Nothing
         where pos x_int x_cur y_int y_cur = Position x_new y_new
@@ -439,11 +439,14 @@ motion environment (Position x y) = do
 display :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> DisplayCallback
 display environment = do
-    clear [ColorBuffer, DepthBuffer]
     env <- get environment
-    let phi = get_modulus (env_red env)
-    let terms = take (phi 150) (get_terms (env_red env))
-    drawTerms terms (SlicePos 0.0 1000.0 950.0 40.0) (vis_ul env) maximum_terms maximum_depth environment
-    drawMouseSquare (mouse_use env) (init_pos env, cur_pos env) (vis_ul env, vis_dr env) (win_size env)
+    let phi   = get_modulus $ env_red env
+        terms = take (phi maximum_reduction_depth) (get_terms $ env_red env)
+        slice = SlicePos 0.0 1000.0 950.0 40.0
+        poses = (init_pos env, cur_pos env)
+        vis   = (vis_ul env, vis_dr env)
+    clear [ColorBuffer, DepthBuffer]
+    drawTerms terms slice (vis_ul env) maximum_terms maximum_depth environment
+    drawMouseSquare (mouse_use env) poses vis (win_size env)
     flush
     swapBuffers
