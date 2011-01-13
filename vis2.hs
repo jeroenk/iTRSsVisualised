@@ -377,6 +377,18 @@ reshape environment (Size w h) = do
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
+update_view :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> IO ()
+update_view environment = do
+    env <- get environment
+    let ul = vis_ul env
+        dr = vis_dr env
+    matrixMode $= Projection
+    loadIdentity
+    ortho (fst ul) (fst dr) (snd dr) (snd ul) (-1.0) 1.0
+    matrixMode $= Modelview 0
+    postRedisplay Nothing
+
 keyboardMouse :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> KeyboardMouseCallback
 keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
@@ -395,21 +407,53 @@ keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     environment $= env {mouse_use = False,
                         vis_ul    = (x, y),
                         vis_dr    = (x', y')}
-    matrixMode  $= Projection
-    loadIdentity
-    ortho x x' y' y (-1.0) 1.0
-    matrixMode  $= Modelview 0
-    postRedisplay Nothing
+    update_view environment
 keyboardMouse environment (MouseButton RightButton) Up _ _ = do
     env <- get environment
     environment $= env {mouse_use = False,
                         vis_ul    = (0.0, 0.0),
                         vis_dr    = (2000.0, 1000.0)}
-    matrixMode  $= Projection
-    loadIdentity
-    ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
-    matrixMode  $= Projection
-    postRedisplay Nothing
+    update_view environment
+keyboardMouse environment (SpecialKey KeyRight) Down _ _ = do
+    env <- get environment
+    let (x, y)   = vis_ul env
+        (x', y') = vis_dr env
+        width    = x' - x
+        move     = width * 0.05
+        x_new    = if x' + move <= 2000.0 then x  + move else 2000.0 - width
+        x_new'   = if x' + move <= 2000.0 then x' + move else 2000.0
+    environment $= env {vis_ul = (x_new, y), vis_dr = (x_new', y')}
+    update_view environment
+keyboardMouse environment (SpecialKey KeyLeft) Down _ _ = do
+    env <- get environment
+    let (x, y)   = vis_ul env
+        (x', y') = vis_dr env
+        width    = x' - x
+        move     = width * 0.05
+        x_new    = if x - move >= 0.0 then x  - move else 0.0
+        x_new'   = if x - move >= 0.0 then x' - move else width
+    environment $= env {vis_ul = (x_new, y), vis_dr = (x_new', y')}
+    update_view environment
+keyboardMouse environment (SpecialKey KeyUp) Down _ _ = do
+    env <- get environment
+    let (x, y)   = vis_ul env
+        (x', y') = vis_dr env
+        height   = y' - y
+        move     = height * 0.05
+        y_new    = if y - move >= 0.0 then y  - move else 0.0
+        y_new'   = if y - move >= 0.0 then y' - move else height
+    environment $= env {vis_ul = (x, y_new), vis_dr = (x', y_new')}
+    update_view environment
+keyboardMouse environment (SpecialKey KeyDown) Down _ _ = do
+    env <- get environment
+    let (x, y)   = vis_ul env
+        (x', y') = vis_dr env
+        height   = y' - y
+        move     = height * 0.05
+        y_new    = if y' + move <= 1000.0 then y  + move else 1000.0 - height
+        y_new'   = if y' + move <= 1000.0 then y' + move else 1000.0
+    environment $= env {vis_ul = (x, y_new), vis_dr = (x', y_new')}
+    update_view environment
 keyboardMouse _ _ _ _ _ = do
     return ()
 
