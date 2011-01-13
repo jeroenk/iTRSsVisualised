@@ -31,7 +31,6 @@ data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
         win_size  :: Size,
         vis_ul    :: (GLdouble, GLdouble),
         vis_dr    :: (GLdouble, GLdouble),
-        zoom_fac  :: GLdouble,
         colors    :: [SymbolColor s v],
         mouse_use :: Bool,
         init_pos  :: Position,
@@ -44,7 +43,8 @@ data SlicePosData
     = SlicePos {
         slice_left  :: GLdouble,
         slice_width :: GLdouble,
-        slice_depth :: GLdouble
+        slice_depth :: GLdouble,
+        slice_arrow :: GLdouble
       }
 
 data PositionData
@@ -63,15 +63,11 @@ data RelPositionData
         rel_up    :: Maybe (Vector3 GLdouble)
       }
 
--- Limit on the maximum depth of the trees being displayed.
---
--- Notice that this depth is beyond what can be reasonably drawn without running
--- into rounding errors
 maximum_depth :: Int
-maximum_depth = 100
+maximum_depth = 7
 
 maximum_terms :: Int
-maximum_terms = 10
+maximum_terms = 8
 
 init_win_size :: Size
 init_win_size = Size 1000 500
@@ -115,7 +111,6 @@ main = do
         win_size  = init_win_size,
         vis_ul    = (0.0, 0.0),
         vis_dr    = (2000.0, 1000.0),
-        zoom_fac  = 1.0,
         colors    = [],
         mouse_use = False,
         init_pos  = Position 0 0,
@@ -243,13 +238,13 @@ get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
 drawSubterms :: (Signature s, Variables v, RewriteSystem s v r)
-    => [Term s v] -> RelPositionData -> GLdouble -> GLdouble -> GLdouble
-       -> GLdouble -> GLdouble -> (EnvironmentRef s v r) -> IO ()
-drawSubterms [] _ _ _ _ _ _ _ = do
+    => [Term s v] -> RelPositionData -> (GLdouble, GLdouble)
+       -> (GLdouble, GLdouble) -> Int -> (EnvironmentRef s v r) -> IO ()
+drawSubterms [] _ _ _ _ _ = do
     return ()
-drawSubterms (s:ss) rel_pos l_min r_max d_max depth_lim zoom environment = do
-    drawTerm s pos l_min r_max d_max depth_lim zoom environment
-    drawSubterms ss rel_pos' l_min r_max d_max depth_lim zoom environment
+drawSubterms (s:ss) rel_pos ul dr max_d environment = do
+    drawTerm s pos ul dr max_d environment
+    drawSubterms ss rel_pos' ul dr max_d environment
     where margin = 0.0
           pos    = Pos {
               left  = rel_left rel_pos + margin,
@@ -260,27 +255,31 @@ drawSubterms (s:ss) rel_pos l_min r_max d_max depth_lim zoom environment = do
           rel_pos' = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
 
 drawTerm :: (Signature s, Variables v, RewriteSystem s v r)
-    => (Term s v) -> PositionData -> GLdouble -> GLdouble -> GLdouble
-       -> GLdouble -> GLdouble -> (EnvironmentRef s v r) -> IO ()
-drawTerm term pos l_min r_max d_max depth_lim zoom environment
-    | (depth pos - 50.0) > depth_lim = do
+    => (Term s v) -> PositionData -> (GLdouble, GLdouble)
+       -> (GLdouble, GLdouble) -> Int -> (EnvironmentRef s v r) -> IO ()
+drawTerm term pos ul dr max_d environment
+    | max_d < 0 = do
         return ()
-    | l_min > right pos = do
+    | fst ul > right pos = do
         drawEdge (up pos) location
         return ()
-    | r_max < left pos = do
+    | fst dr < left pos = do
         drawEdge (up pos) location
         return ()
-    | d_max < depth pos = do
+    | snd dr < depth pos = do
         drawEdge (up pos) location
         return ()
+    | depth pos + size < snd ul = do
+        drawSubterms ss rel_pos ul dr max_d'' environment
     | otherwise = do
         drawEdge (up pos) location
-        drawSubterms ss rel_pos l_min r_max d_max depth_lim zoom environment
+        drawSubterms ss rel_pos ul dr max_d' environment
         drawNode f size location environment
         where location = Vector3 ((left pos + right pos) / 2.0) (depth pos) 0.0
               f        = get_symbol term []
               ss       = get_subterms term
+              max_d'   = max_d - 1
+              max_d''  = if up pos == Nothing then max_d' else max_d
               count    = length ss
               d_count  = fromIntegral count
               width    = right pos - left pos
@@ -299,32 +298,40 @@ drawTerm term pos l_min r_max d_max depth_lim zoom environment
                   }
 
 drawTerms :: (Signature s, Variables v, RewriteSystem s v r)
-    => [Term s v] -> SlicePosData -> GLdouble -> GLdouble -> GLdouble
-       -> GLdouble -> Int -> (EnvironmentRef s v r) -> IO ()
-drawTerms [] _ _ _ _ _ _ _ = do
+    => [Term s v] -> SlicePosData -> (GLdouble, GLdouble) -> Int -> Int
+       -> (EnvironmentRef s v r) -> IO ()
+drawTerms [] _ _ _ _ _ = do
     return ()
-drawTerms _ _ _ _ _ _ 0 _ = do
+drawTerms _ _ _ 0 _ _ = do
     return ()
-drawTerms (s:ss) slice zoom l_min r_max d_max max_terms environment
+drawTerms (s:ss) slice (l_min, u_max) max_terms term_depth environment
     | left_side + width < l_min = do
-        drawTerms ss slice' zoom l_min r_max d_max max_terms environment
+        drawArrow arrow_size arrow_loc
+        drawTerms ss slice' (l_min, u_max) max_terms term_depth environment
+    | slice_depth slice + 50.0 < u_max = do
+        return ()
     | otherwise = do
-        drawTerm s pos l_min r_max d_max depth_lim zoom environment
-        drawTerms ss slice' zoom l_min r_max d_max max_terms' environment
-        where left_side  = slice_left slice
-              width      = slice_width slice
-              max_depth  = slice_depth slice
-              depth_pct  = 1.0 - 1.0 / (1000.0 * zoom)
-              depth_lim  = max_depth * depth_pct
-              max_terms' = max_terms - 1
+        env <- get environment
+        drawArrow arrow_size arrow_loc
+        drawTerm s pos (vis_ul env) (vis_dr env) term_depth environment
+        drawTerms ss slice' (l_min, u_max) max_terms' term_depth' environment
+        where left_side   = slice_left slice
+              right_side  = left_side + width
+              width       = slice_width slice
+              max_depth   = slice_depth slice
+              max_terms'  = max_terms - 1
+              term_depth' = max 2 (term_depth - 1)
+              arrow_loc   = Vector3 right_side 50.0 0.0
+              arrow_size  = slice_arrow slice
               slice' = SlicePos {
-                  slice_left  = left_side + width,
+                  slice_left  = right_side,
                   slice_width = width / 2.0,
-                  slice_depth = max_depth / 2.0
+                  slice_depth = max_depth / 2.0,
+                  slice_arrow = arrow_size / 2.0
                   }
               pos = Pos {
                   left  = left_side + width * 0.025,
-                  right = left_side + width - width * 0.025,
+                  right = right_side - width * 0.025,
                   depth = 50.0,
                   up    = Nothing
                   }
@@ -387,8 +394,7 @@ keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     let y' = max y_new y_new'
     environment $= env {mouse_use = False,
                         vis_ul    = (x, y),
-                        vis_dr    = (x', y'),
-                        zoom_fac  = 2000.0 / (x' - x)}
+                        vis_dr    = (x', y')}
     matrixMode $= Projection
     loadIdentity
     ortho x x' y' y (-1.0) 1.0
@@ -398,8 +404,7 @@ keyboardMouse environment (MouseButton RightButton) Up _ _ = do
     env <- get environment
     environment $= env {mouse_use = False,
                         vis_ul    = (0.0, 0.0),
-                        vis_dr    = (2000.0, 1000.0),
-                        zoom_fac  = 1.0}
+                        vis_dr    = (2000.0, 1000.0)}
     matrixMode $= Projection
     loadIdentity
     ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
@@ -437,8 +442,8 @@ display environment = do
     clear [ColorBuffer, DepthBuffer]
     env <- get environment
     let phi = get_modulus (env_red env)
-    let terms = take (phi maximum_depth) (get_terms (env_red env))
-    drawTerms terms (SlicePos 0.0 1000.0 950.0) (zoom_fac env) (fst $ vis_ul env) (fst $ vis_dr env) (snd $ vis_dr env) maximum_terms environment
+    let terms = take (phi 150) (get_terms (env_red env))
+    drawTerms terms (SlicePos 0.0 1000.0 950.0 40.0) (vis_ul env) maximum_terms maximum_depth environment
     drawMouseSquare (mouse_use env) (init_pos env, cur_pos env) (vis_ul env, vis_dr env) (win_size env)
     flush
     swapBuffers
