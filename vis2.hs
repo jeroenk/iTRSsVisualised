@@ -3,11 +3,13 @@ module Main (
 ) where
 
 import Codec.Image.STB
+import Control.Exception as E
 import Control.Monad
 import Data.Bitmap.OpenGL
 import Data.IORef
 import Graphics.Rendering.OpenGL
-import Graphics.UI.GLUT
+import Graphics.Rendering.FTGL
+import Graphics.UI.GLUT hiding (Font)
 import System.Plugins hiding (Symbol)
 import System.Random
 
@@ -25,7 +27,6 @@ type SymbolColor s v = (Symbol s v, Color4 GLfloat)
 data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
     = Env {
         env_red   :: CReduction s v r,
-        cur_depth :: Int,
         generator :: StdGen,
         win_size  :: Size,
         vis_ul    :: (GLdouble, GLdouble),
@@ -33,7 +34,9 @@ data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
         colors    :: [SymbolColor s v],
         mouse_use :: Bool,
         init_pos  :: Position,
-        cur_pos   :: Position
+        cur_pos   :: Position,
+        node_tex  :: TextureObject,
+        sym_font  :: Font
       }
 
 type EnvironmentRef s v r = IORef (Environment s v r)
@@ -78,7 +81,7 @@ loadNodeTexture :: IO TextureObject
 loadNodeTexture = do
     stat <- loadImage "node.png"
     case stat of
-        Left err  -> error $ "loadNode: " ++ err
+        Left  err -> error $ "loadNode: " ++ err
         Right img -> makeSimpleBitmapTexture img
 
 loadReduction :: String -> IO (CReduction DynamicSigma DynamicVar DynamicSystem)
@@ -95,7 +98,7 @@ loadReduction s = do
 
 main :: IO ()
 main = do
-    -- Initialize environment
+    -- Initialize reduction
     (program_name, args) <- getArgsAndInitialize
 
     reduction_file <- case args of
@@ -105,30 +108,11 @@ main = do
         _    -> error $ "usage: " ++ program_name ++ " <reduction>"
 
     red <- loadReduction reduction_file
-    gen <- newStdGen
-    env <- newIORef $ Env {
-        env_red   = red,
-        cur_depth = 0,
-        generator = gen,
-        win_size  = init_win_size,
-        vis_ul    = (0.0, 0.0),
-        vis_dr    = (2000.0, 1000.0),
-        colors    = [],
-        mouse_use = False,
-        init_pos  = Position 0 0,
-        cur_pos   = Position 0 0
-        }
 
     -- Initialize window
     initialDisplayMode $= [DoubleBuffered, RGBAMode, WithDepthBuffer]
     initialWindowSize  $= init_win_size
     _ <- createWindow program_name
-
-    -- Initialize callbacks
-    displayCallback       $= display env
-    reshapeCallback       $= Just (reshape env)
-    keyboardMouseCallback $= Just (keyboardMouse env)
-    motionCallback        $= Just (motion env)
 
     -- Initialize projections and blending
     clearColor $= Color4 0.0 0.0 0.0 1.0
@@ -144,7 +128,31 @@ main = do
 
     -- Initialize texture
     tex <- loadNodeTexture
-    textureBinding Texture2D $= Just tex
+
+    -- Initialize font
+    font <- createTextureFont "fonts/FreeSans.ttf"
+
+    -- Initialize environment
+    gen <- newStdGen
+    env <- newIORef $ Env {
+        env_red   = red,
+        generator = gen,
+        win_size  = init_win_size,
+        vis_ul    = (0.0, 0.0),
+        vis_dr    = (2000.0, 1000.0),
+        colors    = [],
+        mouse_use = False,
+        init_pos  = Position 0 0,
+        cur_pos   = Position 0 0,
+        node_tex  = tex,
+        sym_font  = font
+        }
+
+    -- Initialize callbacks
+    displayCallback       $= display env
+    reshapeCallback       $= Just (reshape env)
+    keyboardMouseCallback $= Just (keyboardMouse env)
+    motionCallback        $= Just (motion env)
 
     -- Main loop
     mainLoop
@@ -357,12 +365,12 @@ drawMouseSquare :: Bool -> (Position, Position)
 drawMouseSquare True poses vis size = do
     unsafePreservingMatrix $ do
         color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
+        let (x_new, y_new, x_new', y_new') = calc_pos poses vis size False
         renderPrimitive LineLoop $ do
             vertex $ Vertex3 x_new  y_new  0.5
             vertex $ Vertex3 x_new  y_new' 0.5
             vertex $ Vertex3 x_new' y_new' 0.5
             vertex $ Vertex3 x_new' y_new  0.5
-        where (x_new, y_new, x_new', y_new') = calc_pos poses vis size False
 drawMouseSquare False _ _ _ = do
     return ()
 
@@ -480,17 +488,51 @@ motion environment (Position x y) = do
               x' w = max 0 (min x w)
               y' h = max 0 (min y h)
 
-display :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> DisplayCallback
-display environment = do
+displayMouseSquare :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> IO ()
+displayMouseSquare environment = do
+    env <- get environment
+    let poses = (init_pos env, cur_pos env)
+        vis   = (vis_ul env, vis_dr env)
+    drawMouseSquare (mouse_use env) poses vis (win_size env)
+
+displayReduction :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> IO ()
+displayReduction environment = do
     env <- get environment
     let phi   = get_modulus $ env_red env
         terms = take (phi maximum_reduction_depth) (get_terms $ env_red env)
         slice = SlicePos 0.0 1000.0 950.0 40.0
-        poses = (init_pos env, cur_pos env)
-        vis   = (vis_ul env, vis_dr env)
-    clear [ColorBuffer, DepthBuffer]
+    textureBinding Texture2D $= Just (node_tex env)
     drawTerms terms slice (vis_ul env) maximum_terms maximum_depth environment
-    drawMouseSquare (mouse_use env) poses vis (win_size env)
+
+displayError :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> ErrorCall -> IO ()
+displayError environment err = do
+    -- In case of an error, we reset the drawing area, as the matrices might
+    -- have been left in a weird state. We also disable zooming in this case,
+    -- as zooming in to an area where now term structure is drawn possibly
+    -- circumvents the error.
+    clear [ColorBuffer, DepthBuffer]
+    env <- get environment
+    environment $= env {mouse_use = False,
+                        vis_ul    = (0.0, 0.0),
+                        vis_dr    = (2000.0, 1000.0)}
+    matrixMode $= Projection
+    loadIdentity
+    ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
+    matrixMode $= Modelview 0
+    loadIdentity
+    putStrLn $ show err
+    -- _ <- setFontFaceSize (sym_font env) 24 72
+    -- renderFont (sym_font env) "Hello world!" All
+
+display :: (Signature s, Variables v, RewriteSystem s v r)
+    => (EnvironmentRef s v r) -> DisplayCallback
+display environment = do
+    E.catch (do clear [ColorBuffer, DepthBuffer]
+                displayReduction environment
+                displayMouseSquare environment)
+        (displayError environment)
     flush
     swapBuffers
