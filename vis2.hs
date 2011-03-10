@@ -77,9 +77,9 @@ maximum_reduction_depth = 150
 init_win_size :: Size
 init_win_size = Size 1000 500
 
-loadNodeTexture :: IO TextureObject
-loadNodeTexture = do
-    stat <- loadImage "node.png"
+loadNodeTexture :: String -> IO TextureObject
+loadNodeTexture s = do
+    stat <- loadImage s
     case stat of
         Left  err -> error $ "loadNode: " ++ err
         Right img -> makeSimpleBitmapTexture img
@@ -121,13 +121,14 @@ main = do
     loadIdentity
     ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
     matrixMode $= Modelview 0
+    loadIdentity
     blendFunc  $= (SrcAlpha, OneMinusSrcAlpha)
     blend      $= Enabled
     lineSmooth $= Enabled
     hint LineSmooth $= Nicest
 
     -- Initialize texture
-    tex <- loadNodeTexture
+    tex <- loadNodeTexture "node.png"
 
     -- Initialize font
     font <- createTextureFont "fonts/FreeSans.ttf"
