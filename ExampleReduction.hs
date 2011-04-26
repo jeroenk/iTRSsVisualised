@@ -1,11 +1,14 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+
 module ExampleReduction (
     c_reduction
 ) where
 
 import RuleAndSystem
 import Term
-import OmegaReduction
-import DynamicOmegaReduction
+import Reduction
+import Omega
+import DynamicReduction
 
 f :: DynamicSigma
 f = DynamicFun "f" 1
@@ -29,36 +32,37 @@ x :: DynamicVar
 x = DynamicVar "x"
 
 f_x :: Term DynamicSigma DynamicVar
-f_x = function_term f [(1, Variable x)]
+f_x = function_term f [Variable x]
 
 g_x :: Term DynamicSigma DynamicVar
-g_x = function_term g [(1, Variable x)]
+g_x = function_term g [Variable x]
 
 f_omega :: Term DynamicSigma DynamicVar
-f_omega = function_term f [(1, f_omega)]
+f_omega = function_term f [f_omega]
 
 k_3_omega :: Term DynamicSigma DynamicVar
-k_3_omega = function_term k_3 [(1, k_3_omega), (2, k_3_omega), (3, k_3_omega)]
+k_3_omega = function_term k_3 [k_3_omega, k_3_omega, k_3_omega]
 
 k_4_omega :: Term DynamicSigma DynamicVar
-k_4_omega = function_term k_4 [(1, k_4_omega), (2, k_3_omega), (3, f_omega),
-                               (4, k_4_omega)]
+k_4_omega = function_term k_4 [k_4_omega, k_3_omega, f_omega, k_4_omega]
 
 k_5_omega :: Term DynamicSigma DynamicVar
-k_5_omega = function_term k_5 [(1, k_5_omega), (2, k_4_omega), (3, k_3_omega),
-                               (4, f_omega), (5, k_5_omega)]
+k_5_omega = function_term k_5 [k_5_omega, k_4_omega, k_3_omega, f_omega,
+                               k_5_omega]
 
 h_f_f_omega :: Term DynamicSigma DynamicVar
-h_f_f_omega = function_term h [(1, k_5_omega), (2, f_omega)]
+h_f_f_omega = function_term h [k_5_omega, f_omega]
 
 rule_f_x_to_g_x :: RewriteRule DynamicSigma DynamicVar
 rule_f_x_to_g_x = Rule f_x g_x
 
-reduction :: Reduction DynamicSigma DynamicVar DynamicSystem
-reduction = RCons ts (zip ps rs)
-    where ps = [2]:(map (\p -> p ++ [1, 1]) ps)
-          rs = rule_f_x_to_g_x:rs
-          ts = rewrite_steps h_f_f_omega (zip ps rs)
+reduction :: OmegaReduction DynamicSigma DynamicVar DynamicSystem
+reduction = RCons (construct_sequence terms) (construct_sequence steps)
+    where terms = rewrite_steps h_f_f_omega steps
+          steps = zip ps rs
+          ps = [2] : (map (\p -> p ++ [1, 1]) ps)
+          rs = repeat rule_f_x_to_g_x
 
 c_reduction :: CReduction DynamicSigma DynamicVar DynamicSystem
-c_reduction = CRCons reduction (\n -> succ n)
+c_reduction = CRCons reduction (construct_modulus phi)
+    where phi x = x + 1

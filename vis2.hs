@@ -17,14 +17,15 @@ import SignatureAndVariables
 import Term
 import PositionAndSubterm hiding (Position, pos)
 import RuleAndSystem
-import OmegaReduction
-import DynamicOmegaReduction
+import SystemOfNotation
+import Reduction
+import DynamicReduction
 
 import Array
 
 type SymbolColor s v = (Symbol s v, Color4 GLfloat)
 
-data (Signature s, Variables v, RewriteSystem s v r) => Environment s v r
+data RewriteSystem s v r => Environment s v r
     = Env {
         env_red   :: CReduction s v r,
         generator :: StdGen,
@@ -178,14 +179,14 @@ arrow = do
             vertex $ Vertex3 (1.0 :: GLdouble) 0.0 0.0
     lineWidth $= old_width
 
-drawArrow :: GLdouble -> (Vector3 GLdouble) -> IO ()
+drawArrow :: GLdouble -> Vector3 GLdouble -> IO ()
 drawArrow size location = do
     unsafePreservingMatrix $ do
         translate location
         scale size size size
         arrow
 
-drawEdge :: (Maybe (Vector3 GLdouble)) -> (Vector3 GLdouble) -> IO ()
+drawEdge :: Maybe (Vector3 GLdouble) -> Vector3 GLdouble -> IO ()
 drawEdge Nothing _ = do
     return ()
 drawEdge (Just up_pos) down_pos = do
@@ -195,7 +196,7 @@ drawEdge (Just up_pos) down_pos = do
         vertex $ to_vertex down_pos
     where to_vertex (Vector3 x y z) = Vertex3 x y (z - 0.5)
 
-node :: (Color4 GLfloat) -> IO ()
+node :: Color4 GLfloat -> IO ()
 node col = do
     color col
     texture Texture2D $= Enabled
@@ -210,8 +211,8 @@ node col = do
         vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
     texture Texture2D $= Disabled
 
-getColor :: (Signature s, Variables v, RewriteSystem s v r)
-     => Symbol s v -> (EnvironmentRef s v r) -> IO (Color4 GLfloat)
+getColor :: RewriteSystem s v r
+     => Symbol s v -> EnvironmentRef s v r -> IO (Color4 GLfloat)
 getColor f environment = do
     env <- get environment
     let (col, cols', gen') = get_color f (colors env) (generator env)
@@ -233,8 +234,8 @@ getColor f environment = do
                         g_val = (g + 1.0) / 2.0
                         b_val = (b + 1.0) / 2.0
 
-drawNode :: (Signature s, Variables v, RewriteSystem s v r)
-    => Symbol s v -> GLdouble -> (Vector3 GLdouble) -> (EnvironmentRef s v r)
+drawNode :: RewriteSystem s v r
+    => Symbol s v -> GLdouble -> Vector3 GLdouble -> EnvironmentRef s v r
        -> IO ()
 drawNode f size location environment = do
     unsafePreservingMatrix $ do
@@ -248,9 +249,9 @@ get_subterms :: (Signature s, Variables v)
 get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
-drawSubterms :: (Signature s, Variables v, RewriteSystem s v r)
+drawSubterms :: RewriteSystem s v r
     => [Term s v] -> RelPositionData -> (GLdouble, GLdouble)
-       -> (GLdouble, GLdouble) -> Int -> (EnvironmentRef s v r) -> IO ()
+       -> (GLdouble, GLdouble) -> Int -> EnvironmentRef s v r -> IO ()
 drawSubterms [] _ _ _ _ _ = do
     return ()
 drawSubterms (s:ss) rel_pos ul dr max_d environment = do
@@ -265,9 +266,9 @@ drawSubterms (s:ss) rel_pos ul dr max_d environment = do
               }
           rel_pos' = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
 
-drawTerm :: (Signature s, Variables v, RewriteSystem s v r)
-    => (Term s v) -> PositionData -> (GLdouble, GLdouble)
-       -> (GLdouble, GLdouble) -> Int -> (EnvironmentRef s v r) -> IO ()
+drawTerm :: RewriteSystem s v r
+    => Term s v -> PositionData -> (GLdouble, GLdouble)
+       -> (GLdouble, GLdouble) -> Int -> EnvironmentRef s v r -> IO ()
 drawTerm term pos ul dr max_d environment
     | max_d < 0 = do
         return ()
@@ -287,7 +288,7 @@ drawTerm term pos ul dr max_d environment
         drawSubterms ss rel_pos ul dr max_d' environment
         drawNode f size location environment
         where location = Vector3 ((left pos + right pos) / 2.0) (depth pos) 0.0
-              f        = get_symbol term []
+              f        = root_symbol term
               ss       = get_subterms term
               max_d'   = max_d - 1
               max_d''  = if up pos == Nothing then max_d' else max_d
@@ -308,9 +309,9 @@ drawTerm term pos ul dr max_d environment
                   rel_up    = Just location
                   }
 
-drawTerms :: (Signature s, Variables v, RewriteSystem s v r)
+drawTerms :: RewriteSystem s v r
     => [Term s v] -> SlicePosData -> (GLdouble, GLdouble) -> Int -> Int
-       -> (EnvironmentRef s v r) -> IO ()
+       -> EnvironmentRef s v r -> IO ()
 drawTerms [] _ _ _ _ _ = do
     return ()
 drawTerms _ _ _ 0 _ _ = do
@@ -386,8 +387,8 @@ reshape environment (Size w h) = do
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
-update_view :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> IO ()
+update_view :: RewriteSystem s v r
+    => EnvironmentRef s v r -> IO ()
 update_view environment = do
     env <- get environment
     let ul = vis_ul env
@@ -398,8 +399,8 @@ update_view environment = do
     matrixMode $= Modelview 0
     postRedisplay Nothing
 
-keyboardMouse :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> KeyboardMouseCallback
+keyboardMouse :: RewriteSystem s v r
+    => EnvironmentRef s v r -> KeyboardMouseCallback
 keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
     env <- get environment
     environment $= env {mouse_use = True, init_pos = pos, cur_pos = pos}
@@ -466,8 +467,8 @@ keyboardMouse environment (SpecialKey KeyDown) Down _ _ = do
 keyboardMouse _ _ _ _ _ = do
     return ()
 
-motion :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> MotionCallback
+motion :: RewriteSystem s v r
+    => EnvironmentRef s v r -> MotionCallback
 motion environment (Position x y) = do
     env <- get environment
     let mouse                  = mouse_use env
@@ -489,16 +490,21 @@ motion environment (Position x y) = do
               x' w = max 0 (min x w)
               y' h = max 0 (min y h)
 
-displayMouseSquare :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> IO ()
+displayMouseSquare :: RewriteSystem s v r
+    => EnvironmentRef s v r -> IO ()
 displayMouseSquare environment = do
     env <- get environment
     let poses = (init_pos env, cur_pos env)
         vis   = (vis_ul env, vis_dr env)
     drawMouseSquare (mouse_use env) poses vis (win_size env)
 
-displayReduction :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> IO ()
+get_modulus :: RewriteSystem s v r
+    => CReduction s v r -> (Int -> Int)
+get_modulus (CRCons _ phi) = phi'
+    where phi' d = ord_to_int (phi ord_zero d)
+
+displayReduction :: RewriteSystem s v r
+    => EnvironmentRef s v r -> IO ()
 displayReduction environment = do
     env <- get environment
     let phi   = get_modulus $ env_red env
@@ -507,8 +513,8 @@ displayReduction environment = do
     textureBinding Texture2D $= Just (node_tex env)
     drawTerms terms slice (vis_ul env) maximum_terms maximum_depth environment
 
-displayError :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> ErrorCall -> IO ()
+displayError :: RewriteSystem s v r
+    => EnvironmentRef s v r -> ErrorCall -> IO ()
 displayError environment err = do
     -- In case of an error, we reset the drawing area, as the matrices might
     -- have been left in a weird state. We also disable zooming in this case,
@@ -528,8 +534,8 @@ displayError environment err = do
     -- _ <- setFontFaceSize (sym_font env) 24 72
     -- renderFont (sym_font env) "Hello world!" All
 
-display :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> DisplayCallback
+display :: RewriteSystem s v r
+    => EnvironmentRef s v r -> DisplayCallback
 display environment = do
     E.catch (do clear [ColorBuffer, DepthBuffer]
                 displayReduction environment
