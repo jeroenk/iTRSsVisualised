@@ -22,6 +22,7 @@ import Reduction
 import DynamicReduction
 
 import Array
+import List
 
 type SymbolColor s v = (Symbol s v, Color4 GLfloat)
 
@@ -72,7 +73,7 @@ maximum_depth = 7
 maximum_terms :: Int
 maximum_terms = 8
 
-maximum_reduction_depth :: Int
+maximum_reduction_depth :: Integer
 maximum_reduction_depth = 150
 
 init_win_size :: Size
@@ -499,7 +500,7 @@ displayMouseSquare environment = do
     drawMouseSquare (mouse_use env) poses vis (win_size env)
 
 get_modulus :: RewriteSystem s v r
-    => CReduction s v r -> (Int -> Int)
+    => CReduction s v r -> (Integer -> Integer)
 get_modulus (CRCons _ phi) = phi'
     where phi' d = ord_to_int (phi ord_zero d)
 
@@ -507,8 +508,9 @@ displayReduction :: RewriteSystem s v r
     => EnvironmentRef s v r -> IO ()
 displayReduction environment = do
     env <- get environment
-    let phi   = get_modulus $ env_red env
-        terms = take (phi maximum_reduction_depth) (get_terms $ env_red env)
+    let phi     = get_modulus $ env_red env
+        modulus = phi maximum_reduction_depth
+        terms   = genericTake (phi modulus) (get_terms $ env_red env)
         slice = SlicePos 0.0 1000.0 950.0 40.0
     textureBinding Texture2D $= Just (node_tex env)
     drawTerms terms slice (vis_ul env) maximum_terms maximum_depth environment
