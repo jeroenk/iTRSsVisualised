@@ -15,7 +15,6 @@ import System.Random
 
 import SignatureAndVariables
 import Term
-import PositionAndSubterm hiding (Position, pos)
 import RuleAndSystem
 import SystemOfNotation
 import Reduction
