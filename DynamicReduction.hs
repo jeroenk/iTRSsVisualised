@@ -56,7 +56,7 @@ dynamic_term (Variable x)    = Variable x'
 
 dynamic_terms :: (Show s, Show v, RewriteSystem s v r)
     => CReduction s v r -> [Term DynamicSigma DynamicVar]
-dynamic_terms (CRCons (RCons ts _) _) = map dynamic_term (enum ts)
+dynamic_terms (CRCons (RCons ts _) _) = map dynamic_term (get_from ts ord_zero)
 
 dynamic_step :: (Show s, Show v, Signature s, Variables v)
     => Step s v -> Step DynamicSigma DynamicVar
@@ -66,7 +66,7 @@ dynamic_step (ps, Rule l r) = (ps, Rule l' r')
 
 dynamic_steps :: (Show s, Show v, RewriteSystem s v r)
     => CReduction s v r -> [Step DynamicSigma DynamicVar]
-dynamic_steps (CRCons (RCons _ ss) _) = map dynamic_step (enum ss)
+dynamic_steps (CRCons (RCons _ ss) _) = map dynamic_step (get_from ss ord_zero)
 
 dynamic_modulus :: RewriteSystem s v r
     => CReduction s v r -> Modulus Omega
