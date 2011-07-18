@@ -4,3 +4,8 @@ plugins-1.5.1.4
 bitmap-opengl-0.0.0
 stb-image-0.2
 FTGL-1.333
+
+Possible extensions:
+
+* Zoom in and out with scroll wheel (would require freeglut)
+* Open file dialog for reductions (would require GTK+ or wxWidgets)
