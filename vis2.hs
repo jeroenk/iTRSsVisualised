@@ -453,9 +453,7 @@ keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
         y  = min y_new y_new'
         x' = max x_new x_new'
         y' = max y_new y_new'
-    environment $= env {mouse_use = False,
-                        vis_ul    = (x, y),
-                        vis_dr    = (x', y')}
+    environment $= env {mouse_use = False, vis_ul = (x, y), vis_dr = (x', y')}
     update_view environment
 keyboardMouse environment (MouseButton RightButton) Up _ _ = do
     env <- get environment
@@ -502,6 +500,26 @@ keyboardMouse environment (SpecialKey KeyDown) Down _ _ = do
         y_new    = if y' + move <= 1000.0 then y  + move else 1000.0 - height
         y_new'   = if y' + move <= 1000.0 then y' + move else 1000.0
     environment $= env {vis_ul = (x, y_new), vis_dr = (x', y_new')}
+    update_view environment
+keyboardMouse environment (Char '+') Down _ _ = do
+    env <- get environment
+    let x_diff = 0.05 * ((fst $ vis_dr env) - (fst $ vis_ul env))
+        y_diff = 0.05 * ((snd $ vis_dr env) - (snd $ vis_ul env))
+        x  = (fst $ vis_ul env) + x_diff
+        y  = (snd $ vis_ul env) + y_diff
+        x' = (fst $ vis_dr env) - x_diff
+        y' = (snd $ vis_dr env) - y_diff
+    environment $= env {vis_ul = (x, y), vis_dr = (x', y')}
+    update_view environment
+keyboardMouse environment (Char '-') Down _ _ = do
+    env <- get environment
+    let x_diff = 0.05 * ((fst $ vis_dr env) - (fst $ vis_ul env))
+        y_diff = 0.05 * ((snd $ vis_dr env) - (snd $ vis_ul env))
+        x  = (fst $ vis_ul env) - x_diff
+        y  = (snd $ vis_ul env) - y_diff
+        x' = (fst $ vis_dr env) + x_diff
+        y' = (snd $ vis_dr env) + y_diff
+    environment $= env {vis_ul = (x, y), vis_dr = (x', y')}
     update_view environment
 keyboardMouse _ _ _ _ _ = do
     return ()
