@@ -443,7 +443,7 @@ keyboardMouse :: RewriteSystem s v r
 keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
     env <- get environment
     environment $= env {mouse_use = True, init_pos = pos, cur_pos = pos}
-    update_view environment -- Using just "postRedisplay" has performance issues
+    update_view environment -- Just "postRedisplay" has performance issues
 keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
     let poses = (init_pos env, cur_pos env)
@@ -457,69 +457,57 @@ keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     update_view environment
 keyboardMouse environment (MouseButton RightButton) Up _ _ = do
     env <- get environment
-    environment $= env {mouse_use = False,
-                        vis_ul    = (0.0, 0.0),
-                        vis_dr    = (2000.0, 1000.0)}
+    environment $= env {vis_ul = (0.0, 0.0), vis_dr = (2000.0, 1000.0)}
     update_view environment
 keyboardMouse environment (SpecialKey KeyRight) Down _ _ = do
     env <- get environment
-    let (x, y)   = vis_ul env
+    let (x,  y)  = vis_ul env
         (x', y') = vis_dr env
-        width    = x' - x
-        move     = width * 0.05
-        x_new    = if x' + move <= 2000.0 then x  + move else 2000.0 - width
-        x_new'   = if x' + move <= 2000.0 then x' + move else 2000.0
-    environment $= env {vis_ul = (x_new, y), vis_dr = (x_new', y')}
+        move     = (x' - x) * 0.05
+    environment $= env {vis_ul = (x + move, y), vis_dr = (x' + move, y')}
     update_view environment
 keyboardMouse environment (SpecialKey KeyLeft) Down _ _ = do
     env <- get environment
-    let (x, y)   = vis_ul env
+    let (x,  y)  = vis_ul env
         (x', y') = vis_dr env
-        width    = x' - x
-        move     = width * 0.05
-        x_new    = if x - move >= 0.0 then x  - move else 0.0
-        x_new'   = if x - move >= 0.0 then x' - move else width
-    environment $= env {vis_ul = (x_new, y), vis_dr = (x_new', y')}
+        move     = (x' - x) * 0.05
+    environment $= env {vis_ul = (x - move, y), vis_dr = (x' - move, y')}
     update_view environment
 keyboardMouse environment (SpecialKey KeyUp) Down _ _ = do
     env <- get environment
-    let (x, y)   = vis_ul env
+    let (x,  y)  = vis_ul env
         (x', y') = vis_dr env
-        height   = y' - y
-        move     = height * 0.05
-        y_new    = if y - move >= 0.0 then y  - move else 0.0
-        y_new'   = if y - move >= 0.0 then y' - move else height
-    environment $= env {vis_ul = (x, y_new), vis_dr = (x', y_new')}
+        move     = (y' - y) * 0.05
+    environment $= env {vis_ul = (x, y - move), vis_dr = (x', y' - move)}
     update_view environment
 keyboardMouse environment (SpecialKey KeyDown) Down _ _ = do
     env <- get environment
-    let (x, y)   = vis_ul env
+    let (x,  y)  = vis_ul env
         (x', y') = vis_dr env
-        height   = y' - y
-        move     = height * 0.05
-        y_new    = if y' + move <= 1000.0 then y  + move else 1000.0 - height
-        y_new'   = if y' + move <= 1000.0 then y' + move else 1000.0
-    environment $= env {vis_ul = (x, y_new), vis_dr = (x', y_new')}
+        move     = (y' - y) * 0.05
+    environment $= env {vis_ul = (x, y + move), vis_dr = (x', y' + move)}
     update_view environment
 keyboardMouse environment (Char '+') Down _ _ = do
     env <- get environment
-    let x_diff = 0.05 * ((fst $ vis_dr env) - (fst $ vis_ul env))
-        y_diff = 0.05 * ((snd $ vis_dr env) - (snd $ vis_ul env))
-        x  = (fst $ vis_ul env) + x_diff
-        y  = (snd $ vis_ul env) + y_diff
-        x' = (fst $ vis_dr env) - x_diff
-        y' = (snd $ vis_dr env) - y_diff
-    environment $= env {vis_ul = (x, y), vis_dr = (x', y')}
+    let (x,  y)  = vis_ul env
+        (x', y') = vis_dr env
+        x_diff = (x' - x) * 0.05
+        y_diff = (y' - y) * 0.05
+    environment $= env {vis_ul = (x  + x_diff, y  + y_diff),
+                        vis_dr = (x' - x_diff, y' - y_diff)}
     update_view environment
 keyboardMouse environment (Char '-') Down _ _ = do
     env <- get environment
-    let x_diff = 0.05 * ((fst $ vis_dr env) - (fst $ vis_ul env))
-        y_diff = 0.05 * ((snd $ vis_dr env) - (snd $ vis_ul env))
-        x  = (fst $ vis_ul env) - x_diff
-        y  = (snd $ vis_ul env) - y_diff
-        x' = (fst $ vis_dr env) + x_diff
-        y' = (snd $ vis_dr env) + y_diff
-    environment $= env {vis_ul = (x, y), vis_dr = (x', y')}
+    let (x,  y)  = vis_ul env
+        (x', y') = vis_dr env
+        x_diff = (x' - x) * 0.05
+        y_diff = (y' - y) * 0.05
+    environment $= env {vis_ul = (x  - x_diff, y  - y_diff),
+                        vis_dr = (x' + x_diff, y' + y_diff)}
+    update_view environment
+keyboardMouse environment (Char 'r') Down _ _ = do
+    env <- get environment
+    environment $= env {vis_ul = (0.0, 0.0), vis_dr = (2000.0, 1000.0)}
     update_view environment
 keyboardMouse _ _ _ _ _ = do
     return ()
