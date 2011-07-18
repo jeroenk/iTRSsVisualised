@@ -78,6 +78,9 @@ maximum_reduction_depth = 150
 init_win_size :: Size
 init_win_size = Size 1000 500
 
+font_scale :: Num b => b
+font_scale = fromIntegral (4 :: Int)
+
 loadNodeTexture :: String -> IO TextureObject
 loadNodeTexture s = do
     stat <- loadImage s
@@ -133,6 +136,7 @@ main = do
 
     -- Initialize font
     font <- createTextureFont "fonts/FreeSans.ttf"
+    _ <- setFontFaceSize font (24 * font_scale) 72
 
     -- Initialize environment
     gen <- newStdGen
@@ -196,9 +200,9 @@ drawEdge (Just up_pos) down_pos = do
         vertex $ to_vertex down_pos
     where to_vertex (Vector3 x y z) = Vertex3 x y (z - 0.5)
 
-node :: Color4 GLfloat -> IO ()
-node col = do
-    color col
+node :: TextureObject -> IO ()
+node node_texture = do
+    textureBinding Texture2D $= Just node_texture
     texture Texture2D $= Enabled
     renderPrimitive TriangleStrip $ do
         texCoord $ TexCoord2 (0.0 :: GLdouble) 0.0
@@ -210,6 +214,20 @@ node col = do
         texCoord $ TexCoord2 (1.0 :: GLdouble) 1.0
         vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
     texture Texture2D $= Disabled
+
+node_label :: (Signature s, Variables v, Show s, Show v)
+    => Symbol s v -> Font -> IO ()
+node_label f font = do
+    rotate (180.0 :: GLdouble) (Vector3 0.0 0.0 1.0)
+    rotate (180.0 :: GLdouble) (Vector3 0.0 1.0 0.0)
+    scale size size size
+    translate pos
+    renderFont font (show f) All
+    where size = 0.09 / font_scale :: GLdouble
+          pos  = Vector3 x y 0.0
+              where x = 15.0 * font_scale :: GLdouble
+                    y = -3.0 * font_scale :: GLdouble
+
 
 getColor :: RewriteSystem s v r
      => Symbol s v -> EnvironmentRef s v r -> IO (Color4 GLfloat)
@@ -234,22 +252,27 @@ getColor f environment = do
                         g_val = (g + 1.0) / 2.0
                         b_val = (b + 1.0) / 2.0
 
-drawNode :: RewriteSystem s v r
+drawNode :: (RewriteSystem s v r, Show s, Show v)
     => Symbol s v -> GLdouble -> Vector3 GLdouble -> EnvironmentRef s v r
        -> IO ()
 drawNode f size location environment = do
+    col <- getColor f environment
+    env <- get environment
     unsafePreservingMatrix $ do
-        col <- getColor f environment
+        color col
         translate location
         scale size size size
-        node col
+        unsafePreservingMatrix $ do
+            node (node_tex env)
+        unsafePreservingMatrix $ do
+            node_label f (sym_font env)
 
 get_subterms :: (Signature s, Variables v)
     => (Term s v) -> [Term s v]
 get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
-drawSubterms :: RewriteSystem s v r
+drawSubterms :: (RewriteSystem s v r, Show s, Show v)
     => [Term s v] -> RelPositionData -> (GLdouble, GLdouble)
        -> (GLdouble, GLdouble) -> Int -> EnvironmentRef s v r -> IO ()
 drawSubterms [] _ _ _ _ _ = do
@@ -266,22 +289,22 @@ drawSubterms (s:ss) rel_pos ul dr max_d environment = do
               }
           rel_pos' = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
 
-drawTerm :: RewriteSystem s v r
+drawTerm :: (RewriteSystem s v r, Show s, Show v)
     => Term s v -> PositionData -> (GLdouble, GLdouble)
        -> (GLdouble, GLdouble) -> Int -> EnvironmentRef s v r -> IO ()
 drawTerm term pos ul dr max_d environment
     | max_d < 0 = do
         return ()
-    | fst ul > right pos = do
+    | fst ul - (2.0 * size) > right pos = do
         drawEdge (up pos) location
         return ()
-    | fst dr < left pos = do
+    | fst dr + (2.0 * size) < left pos = do
         drawEdge (up pos) location
         return ()
-    | snd dr < depth pos = do
+    | snd dr + (2.0 * size) < depth pos = do
         drawEdge (up pos) location
         return ()
-    | depth pos + size < snd ul = do
+    | snd ul - (2.0 * size) > depth pos = do
         drawSubterms ss rel_pos ul dr max_d'' environment
     | otherwise = do
         drawEdge (up pos) location
@@ -309,7 +332,7 @@ drawTerm term pos ul dr max_d environment
                   rel_up    = Just location
                   }
 
-drawTerms :: RewriteSystem s v r
+drawTerms :: (RewriteSystem s v r, Show s, Show v)
     => [Term s v] -> SlicePosData -> (GLdouble, GLdouble) -> Int -> Int
        -> EnvironmentRef s v r -> IO ()
 drawTerms [] _ _ _ _ _ = do
@@ -503,15 +526,14 @@ get_modulus :: RewriteSystem s v r
 get_modulus (CRCons _ phi) = phi'
     where phi' d = ord_to_int (phi ord_zero d)
 
-displayReduction :: RewriteSystem s v r
+displayReduction :: (RewriteSystem s v r, Show s, Show v)
     => EnvironmentRef s v r -> IO ()
 displayReduction environment = do
     env <- get environment
     let phi     = get_modulus $ env_red env
         modulus = phi maximum_reduction_depth
         terms   = genericTake (phi modulus) (get_terms $ env_red env)
-        slice = SlicePos 0.0 1000.0 950.0 40.0
-    textureBinding Texture2D $= Just (node_tex env)
+        slice   = SlicePos 0.0 1000.0 950.0 40.0
     drawTerms terms slice (vis_ul env) maximum_terms maximum_depth environment
 
 displayError :: RewriteSystem s v r
@@ -532,10 +554,8 @@ displayError environment err = do
     matrixMode $= Modelview 0
     loadIdentity
     putStrLn $ show err
-    -- _ <- setFontFaceSize (sym_font env) 24 72
-    -- renderFont (sym_font env) "Hello world!" All
 
-display :: RewriteSystem s v r
+display :: (RewriteSystem s v r, Show s, Show v)
     => EnvironmentRef s v r -> DisplayCallback
 display environment = do
     E.catch (do clear [ColorBuffer, DepthBuffer]
