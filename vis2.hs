@@ -3,7 +3,7 @@ module Main (
 ) where
 
 import Codec.Image.STB
-import Control.Exception as E
+import qualified Control.Exception as E
 import Control.Monad
 import Data.Bitmap.OpenGL
 import Data.IORef
@@ -16,6 +16,7 @@ import System.Random
 
 import SignatureAndVariables
 import Term
+import qualified PositionAndSubterm as P
 import RuleAndSystem
 import SystemOfNotation
 import Reduction
@@ -163,7 +164,7 @@ main = do
 
     -- Initialize environment
     gen <- newStdGen
-    env <- newIORef $ Env {
+    environment <- newIORef $ Env {
         env_red    = red,
         generator  = gen,
         win_size   = init_win_size,
@@ -180,14 +181,14 @@ main = do
         }
 
     -- Initialize callbacks
-    displayCallback       $= display env
-    reshapeCallback       $= Just (reshape env)
-    keyboardMouseCallback $= Just (keyboardMouse env)
-    motionCallback        $= Just (motion env)
+    displayCallback       $= display environment
+    reshapeCallback       $= Just (reshape environment)
+    keyboardMouseCallback $= Just (keyboardMouse environment)
+    motionCallback        $= Just (motion environment)
 
     -- Color menu
-    let menu = Menu [MenuEntry "Black Background" (blackBackground env),
-                     MenuEntry "White Background" (whiteBackground env)]
+    let menu = Menu [MenuEntry "Black Background" (blackBackground environment),
+                     MenuEntry "White Background" (whiteBackground environment)]
     attachMenu RightButton menu
 
     -- Main loop
@@ -249,7 +250,7 @@ node node_texture = do
         vertex $ Vertex3 (1.0 :: GLdouble) 1.0 0.0
     texture Texture2D $= Disabled
 
-node_label :: (Signature s, Variables v, Show s, Show v)
+node_label :: (Show s, Show v, Signature s, Variables v)
     => Symbol s v -> Font -> IO ()
 node_label f font = do
     rotate (180.0 :: GLdouble) (Vector3 0.0 0.0 1.0)
@@ -291,14 +292,17 @@ getColor f environment = do
                         new_col_b = Color4 r_val_b g_val_b b_val_b 1.0
                         new_col_w = Color4 r_val_w g_val_w b_val_w 1.0
 
-drawNode :: (RewriteSystem s v r, Show s, Show v)
-    => Symbol s v -> GLdouble -> Vector3 GLdouble -> EnvironmentRef s v r
-       -> IO ()
-drawNode f size location environment = do
+drawNode :: (Show s, Show v, RewriteSystem s v r)
+    => Symbol s v -> Maybe P.Position -> GLdouble -> Vector3 GLdouble
+       -> EnvironmentRef s v r -> IO ()
+drawNode f redex_p size location environment = do
     (col_b, col_w) <- getColor f environment
     env <- get environment
     unsafePreservingMatrix $ do
-        color (if background env == Black then col_b else col_w)
+        let red  = Color4 1.0 0.0 0.0 1.0
+            col  = if background env == Black then col_b else col_w
+            col' = if isJust redex_p && fromJust redex_p == [] then red else col
+        color col'
         translate location
         scale size size size
         unsafePreservingMatrix $ do
@@ -311,14 +315,14 @@ get_subterms :: (Signature s, Variables v)
 get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
-drawSubterms :: (RewriteSystem s v r, Show s, Show v)
-    => [Term s v] -> RelPositionData -> (GLdouble, GLdouble)
+drawSubterms :: (Show s, Show v, RewriteSystem s v r)
+    => [Term s v] -> Maybe P.Position -> RelPositionData -> (GLdouble, GLdouble)
        -> (GLdouble, GLdouble) -> Int -> Int -> EnvironmentRef s v r -> IO ()
-drawSubterms [] _ _ _ _ _ _ = do
+drawSubterms [] _ _ _ _ _ _ _ = do
     return ()
-drawSubterms (s:ss) rel_pos ul dr max_d max_n environment = do
-    drawTerm s pos ul dr max_d max_n environment
-    drawSubterms ss rel_pos' ul dr max_d max_n environment
+drawSubterms (s:ss) redex_p rel_pos ul dr max_d max_n environment = do
+    drawTerm s redex_p' pos ul dr max_d max_n environment
+    drawSubterms ss redex_p'' rel_pos' ul dr max_d max_n environment
     where margin = 0.0
           pos    = Pos {
               left  = rel_left rel_pos + margin,
@@ -327,11 +331,20 @@ drawSubterms (s:ss) rel_pos ul dr max_d max_n environment = do
               up    = rel_up rel_pos
               }
           rel_pos' = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
+          (redex_p', redex_p'') = new_position redex_p
+          new_position Nothing
+              = (Nothing, Nothing)
+          new_position (Just (p:ps))
+              | p == 1    = (Just ps, Nothing)
+              | p > 1     = (Nothing, Just (p - 1:ps))
+              | otherwise = error "Illegal position"
+          new_position (Just [])
+              = (Nothing, Nothing)
 
-drawTerm :: (RewriteSystem s v r, Show s, Show v)
-    => Term s v -> PositionData -> (GLdouble, GLdouble)
+drawTerm :: (Show s, Show v, RewriteSystem s v r)
+    => Term s v -> Maybe P.Position -> PositionData -> (GLdouble, GLdouble)
        -> (GLdouble, GLdouble) -> Int -> Int -> EnvironmentRef s v r -> IO ()
-drawTerm term pos ul dr max_d max_n environment
+drawTerm term redex_p pos ul dr max_d max_n environment
     | max_d < 0 = do
         return ()
     | fst ul - (2.0 * size) > right pos = do
@@ -347,16 +360,16 @@ drawTerm term pos ul dr max_d max_n environment
         drawEdge (up pos) location (background env)
         return ()
     | snd ul - (2.0 * size) > depth pos = do
-        drawSubterms ss rel_pos ul dr max_d'' max_n environment
+        drawSubterms ss redex_p rel_pos ul dr max_d'' max_n environment
     | max_n <= 0 = do
         env <- get environment
         drawEdge (up pos) location (background env)
-        drawSubterms ss rel_pos ul dr max_d' 0 environment
+        drawSubterms ss redex_p rel_pos ul dr max_d' 0 environment
     | otherwise = do
         env <- get environment
         drawEdge (up pos) location (background env)
-        drawSubterms ss rel_pos ul dr max_d' max_n' environment
-        drawNode f size location environment
+        drawSubterms ss redex_p rel_pos ul dr max_d' max_n' environment
+        drawNode f redex_p size location environment
         where location = Vector3 ((left pos + right pos) / 2.0) (depth pos) 0.0
               f        = root_symbol term
               ss       = get_subterms term
@@ -380,36 +393,37 @@ drawTerm term pos ul dr max_d max_n environment
                   rel_up    = Just location
                   }
 
-drawTerms :: (RewriteSystem s v r, Show s, Show v)
-    => [Term s v] -> SlicePosData -> (GLdouble, GLdouble) -> Int -> Int -> Int
-       -> EnvironmentRef s v r -> IO ()
-drawTerms [] _ _ _ _ _ _ = do
+drawTerms :: (Show s, Show v, RewriteSystem s v r)
+    => [Term s v] -> [P.Position] -> SlicePosData -> (GLdouble, GLdouble) -> Int
+       -> Int -> Int -> EnvironmentRef s v r -> IO ()
+drawTerms [] [] _ _ _ _ _ _ = do
     return ()
-drawTerms _ _ _ 0 _ _ _ = do
+drawTerms _ _ _ _ 0 _ _ _ = do
     return ()
-drawTerms (s:ss) slice (l_min, u_max) max_ts max_d max_ns environment
+drawTerms (s:ss) (p:ps) slice (l_min, u_max) max_ts max_d max_ns environment
     | s_left + s_width < l_min = do
         env <- get environment
         drawArrow arrow_size arrow_loc (background env)
-        drawTerms ss slice' (l_min, u_max) max_ts max_d max_ns environment
+        drawTerms ss ps slice' (l_min, u_max) max_ts max_d max_ns environment
     | slice_depth slice + 50.0 < u_max = do
         return ()
     | otherwise = do
         env <- get environment
         drawArrow arrow_size arrow_loc (background env)
-        drawTerm s pos (vis_ul env) (vis_dr env) max_d max_ns environment
-        drawTerms ss slice' (l_min, u_max) max_ts' max_d' max_ns'  environment
+        drawTerm s p' pos (vis_ul env) (vis_dr env) max_d max_ns environment
+        drawTerms ss ps slice' (l_min, u_max) max_ts' max_d' max_ns' environment
         where start_depth = 50.0
-              s_left     = slice_left slice
-              s_right    = s_left + s_width
-              s_width    = slice_width slice
-              s_depth    = slice_depth slice
-              margin     = s_width * 0.025
-              max_ts'    = max_ts - 1
-              max_d'     = max 2 (max_d - 1)
-              max_ns'    = max_ns - 1
-              arrow_loc  = Vector3 s_right start_depth 0.0
-              arrow_size = slice_arrow slice
+              p'          = Just p
+              s_left      = slice_left slice
+              s_right     = s_left + s_width
+              s_width     = slice_width slice
+              s_depth     = slice_depth slice
+              margin      = s_width * 0.025
+              max_ts'     = max_ts - 1
+              max_d'      = max 2 (max_d - 1)
+              max_ns'     = max_ns - 1
+              arrow_loc   = Vector3 s_right start_depth 0.0
+              arrow_size  = slice_arrow slice
               slice' = SlicePos {
                   slice_left  = s_right,
                   slice_width = s_width / 2.0,
@@ -422,6 +436,8 @@ drawTerms (s:ss) slice (l_min, u_max) max_ts max_d max_ns environment
                   depth = start_depth,
                   up    = Nothing
                   }
+drawTerms  _ _ _ _ _ _ _ _ = do
+    error "Number of terms and positions differ"
 
 zoom_ok :: GLdouble -> GLdouble -> Bool
 zoom_ok x x' = abs (x' - x) >=  2000.0 * maximum_zoom
@@ -594,7 +610,11 @@ get_modulus :: RewriteSystem s v r
 get_modulus (CRCons _ phi) = phi'
     where phi' d = ord_to_int (phi ord_zero d)
 
-drawReduction :: (RewriteSystem s v r, Show s, Show v)
+get_positions :: RewriteSystem s v r
+    => CReduction s v r -> [P.Position]
+get_positions (CRCons (RCons _ ss) _) = map fst (get_from ss ord_zero)
+
+drawReduction :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> IO ()
 drawReduction environment = do
     dl <- generate_list
@@ -605,16 +625,17 @@ drawReduction environment = do
               let phi     = get_modulus $ env_red env
                   modulus = phi maximum_reduction_depth
                   ts      = genericTake (phi modulus) (get_terms $ env_red env)
+                  ps      = get_positions $ env_red env
                   slice   = SlicePos 0.0 1000.0 950.0 40.0
                   ul      = vis_ul env
                   max_ts  = maximum_terms
                   max_d   = maximum_depth
                   max_ns  = maximum_nodes
               list <- defineNewList Compile $ do
-                  drawTerms ts slice ul max_ts max_d max_ns environment
+                  drawTerms ts ps slice ul max_ts max_d max_ns environment
               return list
 
-displayReduction :: (RewriteSystem s v r, Show s, Show v)
+displayReduction :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> IO ()
 displayReduction environment = do
     env <- get environment
@@ -622,12 +643,12 @@ displayReduction environment = do
     env' <- get environment -- Updated by drawReduction
     callList $ fromJust (red_list env')
 
-displayError :: ErrorCall -> IO ()
+displayError :: E.ErrorCall -> IO ()
 displayError err = do
     -- In case of an error we exit, as we might end up in an infinite loop
     error $ show err
 
-blackBackground :: (RewriteSystem s v r, Show s, Show v)
+blackBackground :: RewriteSystem s v r
     => EnvironmentRef s v r -> MenuCallback
 blackBackground environment = do
     clearColor $= Color4 0.0 0.0 0.0 1.0
@@ -635,7 +656,7 @@ blackBackground environment = do
     environment $= env {background = Black}
     update_view environment
 
-whiteBackground :: (RewriteSystem s v r, Show s, Show v)
+whiteBackground :: RewriteSystem s v r
     => EnvironmentRef s v r -> MenuCallback
 whiteBackground environment = do
     clearColor $= Color4 1.0 1.0 1.0 1.0
@@ -643,7 +664,7 @@ whiteBackground environment = do
     environment $= env {background = White}
     update_view environment
 
-display :: (RewriteSystem s v r, Show s, Show v)
+display :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> DisplayCallback
 display environment = do
     E.catch (do clear [ColorBuffer, DepthBuffer]

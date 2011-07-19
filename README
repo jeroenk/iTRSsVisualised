@@ -5,7 +5,18 @@ bitmap-opengl-0.0.0
 stb-image-0.2
 FTGL-1.333
 
+Usage
+
+* +/- (maximum zoom)
+* cursor keys
+* left mouse
+* right mouse
+* r key
+
+The root of the contracted redex is colored red.
+
 Possible extensions:
 
 * Zoom in and out with scroll wheel (would require freeglut)
 * Open file dialog for reductions (would require GTK+ or wxWidgets)
+* Different color schemes
