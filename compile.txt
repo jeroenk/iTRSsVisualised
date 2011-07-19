@@ -1,1 +1,0 @@
-ghc -i.. --make -Wall visualization.hs -o visualization -L/Users/jketema/tools/ftgl/lib -lftgl

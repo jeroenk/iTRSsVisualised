@@ -1,3 +1,6 @@
+
+ghc -i.. --make -Wall visualization.hs -o visualization -L/Users/jketema/tools/ftgl/lib -lftgl
+
 Dependencies:
 
 plugins-1.5.1.4
