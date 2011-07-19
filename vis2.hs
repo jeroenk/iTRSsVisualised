@@ -93,6 +93,9 @@ maximum_reduction_depth = 150
 maximum_nodes :: Int
 maximum_nodes = 4
 
+maximum_zoom :: GLdouble
+maximum_zoom = 1.6e-5
+
 init_win_size :: Size
 init_win_size = Size 1000 500
 
@@ -259,7 +262,6 @@ node_label f font = do
               where x = 15.0 * font_scale :: GLdouble
                     y = -3.0 * font_scale :: GLdouble
 
-
 getColor :: RewriteSystem s v r
      => Symbol s v -> EnvironmentRef s v r
         -> IO (Color4 GLfloat, Color4 GLfloat)
@@ -421,17 +423,27 @@ drawTerms (s:ss) slice (l_min, u_max) max_ts max_d max_ns environment
                   up    = Nothing
                   }
 
+zoom_ok :: GLdouble -> GLdouble -> Bool
+zoom_ok x x' = abs (x' - x) >=  2000.0 * maximum_zoom
+
+limit_pos :: (GLdouble, GLdouble, GLdouble, GLdouble)
+    -> (GLdouble, GLdouble, GLdouble, GLdouble)
+limit_pos (x, y, x', y')
+    | zoom_ok x x' = (x, y, x', y')
+    | otherwise    = (x, y, x_new', y_new')
+    where x_new' = x + 2000.0 * (if x' < x then -maximum_zoom else maximum_zoom)
+          y_new' = y + 1000.0 * (if y' < y then -maximum_zoom else maximum_zoom)
+
 calc_pos :: (Position, Position) -> ((GLdouble, GLdouble), (GLdouble, GLdouble))
-       -> Size -> Bool -> (GLdouble, GLdouble, GLdouble, GLdouble)
-calc_pos (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) zoom
-    | x == x' && y == y && zoom = (v, w, v', w')
-    | otherwise = (x_new, y_new, x_new', y_new')
-        where x_new   = v + fromIntegral x * x_scale  :: GLdouble
-              y_new   = w + fromIntegral y * y_scale  :: GLdouble
-              x_new'  = v + fromIntegral x' * x_scale :: GLdouble
-              y_new'  = w + fromIntegral y' * y_scale :: GLdouble
-              x_scale = (v' - v) / fromIntegral p
-              y_scale = (w' - w) / fromIntegral q
+       -> Size -> (GLdouble, GLdouble, GLdouble, GLdouble)
+calc_pos (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) =
+    limit_pos (x_new, y_new, x_new', y_new')
+    where x_new   = v + fromIntegral x * x_scale  :: GLdouble
+          y_new   = w + fromIntegral y * y_scale  :: GLdouble
+          x_new'  = v + fromIntegral x' * x_scale :: GLdouble
+          y_new'  = w + fromIntegral y' * y_scale :: GLdouble
+          x_scale = (v' - v) / fromIntegral p
+          y_scale = (w' - w) / fromIntegral q
 
 drawMouseSquare :: Bool -> (Position, Position)
        -> ((GLdouble, GLdouble), (GLdouble, GLdouble)) -> Size -> Background
@@ -441,7 +453,7 @@ drawMouseSquare True poses vis size back = do
         if back == Black
         then color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
         else color $ Color4 0.0 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 1.0
-        let (x_new, y_new, x_new', y_new') = calc_pos poses vis size False
+        let (x_new, y_new, x_new', y_new') = calc_pos poses vis size
         renderPrimitive LineLoop $ do
             vertex $ Vertex3 x_new  y_new  0.5
             vertex $ Vertex3 x_new  y_new' 0.5
@@ -486,7 +498,7 @@ keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
     let poses = (init_pos env, cur_pos env)
         vis   = (vis_ul env, vis_dr env)
-    let (x_new, y_new, x_new', y_new') = calc_pos poses vis (win_size env) True
+    let (x_new, y_new, x_new', y_new') = calc_pos poses vis (win_size env)
         x  = min x_new x_new'
         y  = min y_new y_new'
         x' = max x_new x_new'
@@ -525,8 +537,8 @@ keyboardMouse environment (Char '+') Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_ul env
         (x', y') = vis_dr env
-        x_diff = (x' - x) * 0.05
-        y_diff = (y' - y) * 0.05
+        x_diff = if zoom_ok x x' then (x' - x) * 0.05 else 0.0
+        y_diff = if zoom_ok x x' then (y' - y) * 0.05 else 0.0
     environment $= env {vis_ul = (x  + x_diff, y  + y_diff),
                         vis_dr = (x' - x_diff, y' - y_diff)}
     update_view environment
