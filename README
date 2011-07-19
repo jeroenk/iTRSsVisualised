@@ -16,18 +16,19 @@ Usage
 
 To experiment with the program try either
 
-  ./visualization ExampleReduction
+  visualization ExampleReduction
 
 or
 
-  ./visualization ExampleReduction2
+  visualization ExampleReduction2
 
 Remark that the colors of nodes are chosen randomly depending of the function
 symbol of a node. Moreover, the root node of the contracted redex is always
 colored red.
 
 New reductions can be defined by implementing a module that exports a function
-"c_reduction" of type "DynamicReduction".
+"c_reduction" of type "DynamicReduction". Note that this currently requires
+access to the source code (no package is installed for DynamicReduction).
 
 The program accepts the following keyboard and mouse inputs:
 
@@ -43,34 +44,35 @@ right mouse button : change background color
 Compilation
 -----------
 
-The program can be compiled with
+The program can be compiled with:
 
-  ghc -i.. --make -Wall visualization.hs -o visualization
+  ./Setup.lhs configure
+  ./Setup.lhs build
 
-If necessary linking against the ftgl library should be done explicitly by
-means of the following additional options:
+Depending on the installation location of the dependencies --user may have to
+be pass to configure.
 
-  -L<fgtl prefix>/lib -lftgl
+Optionally the program can be installed:
+
+  ./Setup.lhs install
+
+However, after compilation a copy of the program can also be found in the
+source directory.
 
 Dependencies
 ------------
 
-The program has a number external dependencies (where the version numbers
-indicate the versions tested with):
+The program has a number dependencies (where the version numbers are the
+versions tested with):
 
-* plugins-1.5.1.4
-* bitmap-0.0.1
-* bitmap-opengl-0.0.0
-* stb-image-0.2
-* FTGL-1.333 which further depends on ftgl-2.1.3-rc5
+* plugins 1.5.1.4
+* bitmap-opengl 0.0.0
+* stb-image 0.2
+* FTGL 1.333
 
-All external dependencies, except for ftgl, can be obtained from Hackage:
+All dependencies can be obtained through Hackage:
 
   http://hackage.haskell.org/
-
-ftgl can be obtained from:
-
-  http://sourceforge.net/projects/ftgl/
 
 Possible Future Extensions
 --------------------------

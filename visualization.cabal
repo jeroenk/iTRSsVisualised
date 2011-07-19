@@ -1,0 +1,30 @@
+Name:          Visualization
+Version:       0.1
+Cabal-Version: >= 1.6
+Author:        Jeroen Ketema
+License:       OtherLicense
+Synopsis:      Visualization fo infinite reductions
+Category:      Tools
+Build-Type:    Simple
+Stability:     Alpha
+Tested-With:   GHC >= 6.12.3
+Data-Files:
+        node.png,
+        fonts/*.ttf
+
+
+Executable visualization
+    Build-Depends:
+        base ==4.*,
+        bitmap-opengl ==0.0.0,
+        directory >= 1.1,
+        FTGL ==1.333,
+        GLUT >= 2.1,
+        haskell98,
+        OpenGL >= 2.2,
+        plugins >= 1.5,
+        process >= 1.0,
+        random,
+        stb-image ==0.2
+    Main-Is: visualization.hs
+    HS-Source-Dirs: ., ..

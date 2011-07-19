@@ -1,3 +1,4 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 {-
 Copyright (C) 2011 Jeroen Ketema
 
@@ -28,7 +29,9 @@ import Data.Maybe
 import Graphics.Rendering.OpenGL
 import Graphics.Rendering.FTGL
 import Graphics.UI.GLUT hiding (Font)
+import System.Directory
 import System.Plugins hiding (Symbol)
+import System.Process
 import System.Random
 
 import SignatureAndVariables
@@ -38,6 +41,8 @@ import RuleAndSystem
 import SystemOfNotation
 import Reduction
 import DynamicReduction
+
+import Paths_Visualization
 
 import Array
 import List
@@ -129,15 +134,18 @@ loadNodeTexture s = do
 
 loadReduction :: String -> IO (DynamicReduction)
 loadReduction s = do
-    make_stat <- make (s ++ ".hs") ["-i.."]
+    let to_string = foldr (\x y -> x ++ "\n" ++ y) ""
+    putStrLn ("Compiling " ++ s)
+    make_stat <- makeAll (s ++ ".hs") ["-i.."]
     case make_stat of
         MakeFailure err -> error $ to_string err
-        MakeSuccess _ _ -> return ()
+        MakeSuccess _ _ -> putStrLn ("Done compiling " ++ s)
     load_stat <- load (s ++ ".o") [".."] [] "c_reduction"
-    case load_stat of
+    reduction <- case load_stat of
         LoadFailure err -> error $ to_string err
         LoadSuccess _ v -> return v
-        where to_string = foldr (\x y -> x ++ "\n" ++ y) ""
+    _ <- runCommand "rm -f *.o *.hi"
+    return reduction
 
 main :: IO ()
 main = do
@@ -173,10 +181,15 @@ main = do
     hint LineSmooth $= Nicest
 
     -- Initialize texture
-    tex <- loadNodeTexture "node.png"
+    let node = "node.png"
+    dir <- getDataDir
+    file_ok <- doesFileExist node
+    tex <- loadNodeTexture $ (if file_ok then "" else dir ++ "/") ++ node
 
     -- Initialize font
-    font <- createTextureFont "fonts/FreeSans.ttf"
+    let font = "fonts/FreeSans.ttf"
+    file_ok <- doesFileExist font
+    font <- createTextureFont $ (if file_ok then "" else dir ++ "/") ++ font
     _ <- setFontFaceSize font (24 * font_scale) 72
 
     -- Initialize environment
