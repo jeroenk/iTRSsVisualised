@@ -31,11 +31,11 @@ import DynamicReduction
 import ExampleTermsAndSubstitutions
 import ExampleRulesAndSystems
 
--- A useful term.
+-- Term.
 h_f_f_omega :: Term_Sigma_Var
 h_f_f_omega = function_term h [f_omega, f_omega]
 
--- The example reduction.
+-- Reduction.
 reduction' :: OmegaReduction Sigma Var System_a_f_x
 reduction' = RCons (construct_sequence terms) (construct_sequence steps)
     where terms = rewrite_steps h_f_f_omega steps

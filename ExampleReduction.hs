@@ -30,7 +30,7 @@ import Reduction
 import Omega
 import DynamicReduction
 
--- Elements of the signature.
+-- Signature and variables.
 f :: DynamicSigma
 f = DynamicFun "f" 1
 
@@ -52,7 +52,7 @@ k_5 = DynamicFun "k5" 5
 x :: DynamicVar
 x = DynamicVar "x"
 
--- Some useful terms.
+-- Terms.
 f_x :: Term DynamicSigma DynamicVar
 f_x = function_term f [Variable x]
 
@@ -75,11 +75,11 @@ k_5_omega = function_term k_5 [k_5_omega, k_4_omega, k_3_omega, f_omega,
 h_f_f_omega :: Term DynamicSigma DynamicVar
 h_f_f_omega = function_term h [k_5_omega, f_omega]
 
--- The sole rewrite rule of the defined system.
+-- Rewrite rule.
 rule_f_x_to_g_x :: RewriteRule DynamicSigma DynamicVar
 rule_f_x_to_g_x = Rule f_x g_x
 
--- The example reduction.
+-- Reduction.
 reduction :: OmegaReduction DynamicSigma DynamicVar DynamicSystem
 reduction = RCons (construct_sequence terms) (construct_sequence steps)
     where terms = rewrite_steps h_f_f_omega steps
