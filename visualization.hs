@@ -110,7 +110,7 @@ loadNodeTexture s = do
         Left  err -> error $ "loadNode: " ++ err
         Right img -> makeSimpleBitmapTexture img
 
-loadReduction :: String -> IO (CReduction DynamicSigma DynamicVar DynamicSystem)
+loadReduction :: String -> IO (DynamicReduction)
 loadReduction s = do
     make_stat <- make (s ++ ".hs") ["-i.."]
     case make_stat of
