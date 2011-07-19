@@ -610,24 +610,10 @@ displayReduction environment = do
     env' <- get environment -- Updated by drawReduction
     callList $ fromJust (red_list env')
 
-displayError :: RewriteSystem s v r
-    => EnvironmentRef s v r -> ErrorCall -> IO ()
-displayError environment err = do
-    -- In case of an error, we reset the drawing area, as the matrices might
-    -- have been left in a weird state. We also disable zooming in this case,
-    -- as zooming in to an area where now term structure is drawn possibly
-    -- circumvents the error.
-    clear [ColorBuffer, DepthBuffer]
-    env <- get environment
-    environment $= env {mouse_use = False,
-                        vis_ul    = (0.0, 0.0),
-                        vis_dr    = (2000.0, 1000.0)}
-    matrixMode $= Projection
-    loadIdentity
-    ortho 0.0 2000.0 1000.0 0.0 (-1.0) 1.0
-    matrixMode $= Modelview 0
-    loadIdentity
-    putStrLn $ show err
+displayError :: ErrorCall -> IO ()
+displayError err = do
+    -- In case of an error we exit, as we might end up in an infinite loop
+    error $ show err
 
 blackBackground :: (RewriteSystem s v r, Show s, Show v)
     => EnvironmentRef s v r -> MenuCallback
@@ -651,6 +637,6 @@ display environment = do
     E.catch (do clear [ColorBuffer, DepthBuffer]
                 displayReduction environment
                 displayMouseSquare environment)
-        (displayError environment)
+        displayError
     flush
     swapBuffers
