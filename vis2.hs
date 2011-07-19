@@ -24,22 +24,35 @@ import DynamicReduction
 import Array
 import List
 
-type SymbolColor s v = (Symbol s v, Color4 GLfloat)
+-- Mapping from a symbol to a color. The first color represents the one used
+-- on a black background and the second represents the one used on a white
+-- background.
+type SymbolColor s v = (Symbol s v, Color4 GLfloat, Color4 GLfloat)
+
+data Background
+    = Black
+    | White
+
+instance Eq Background where
+    Black == Black = True
+    White == White = True
+    _ == _         = False
 
 data RewriteSystem s v r => Environment s v r
     = Env {
-        env_red   :: CReduction s v r,
-        generator :: StdGen,
-        win_size  :: Size,
-        vis_ul    :: (GLdouble, GLdouble),
-        vis_dr    :: (GLdouble, GLdouble),
-        colors    :: [SymbolColor s v],
-        mouse_use :: Bool,
-        init_pos  :: Position,
-        cur_pos   :: Position,
-        node_tex  :: TextureObject,
-        sym_font  :: Font,
-        red_list  :: Maybe DisplayList
+        env_red    :: CReduction s v r,
+        generator  :: StdGen,
+        win_size   :: Size,
+        vis_ul     :: (GLdouble, GLdouble),
+        vis_dr     :: (GLdouble, GLdouble),
+        background :: Background,
+        colors     :: [SymbolColor s v],
+        mouse_use  :: Bool,
+        init_pos   :: Position,
+        cur_pos    :: Position,
+        node_tex   :: TextureObject,
+        sym_font   :: Font,
+        red_list   :: Maybe DisplayList
       }
 
 type EnvironmentRef s v r = IORef (Environment s v r)
@@ -148,18 +161,19 @@ main = do
     -- Initialize environment
     gen <- newStdGen
     env <- newIORef $ Env {
-        env_red   = red,
-        generator = gen,
-        win_size  = init_win_size,
-        vis_ul    = (0.0, 0.0),
-        vis_dr    = (2000.0, 1000.0),
-        colors    = [],
-        mouse_use = False,
-        init_pos  = Position 0 0,
-        cur_pos   = Position 0 0,
-        node_tex  = tex,
-        sym_font  = font,
-        red_list  = Nothing
+        env_red    = red,
+        generator  = gen,
+        win_size   = init_win_size,
+        vis_ul     = (0.0, 0.0),
+        vis_dr     = (2000.0, 1000.0),
+        background = Black,
+        colors     = [],
+        mouse_use  = False,
+        init_pos   = Position 0 0,
+        cur_pos    = Position 0 0,
+        node_tex   = tex,
+        sym_font   = font,
+        red_list   = Nothing
         }
 
     -- Initialize callbacks
@@ -168,14 +182,21 @@ main = do
     keyboardMouseCallback $= Just (keyboardMouse env)
     motionCallback        $= Just (motion env)
 
+    -- Color menu
+    let menu = Menu [MenuEntry "Black Background" (blackBackground env),
+                     MenuEntry "White Background" (whiteBackground env)]
+    attachMenu RightButton menu
+
     -- Main loop
     mainLoop
 
-arrow :: IO ()
-arrow = do
+arrow :: Background -> IO ()
+arrow back = do
     old_width <- get lineWidth
     lineWidth $= 2.0
-    color $ Color4 (1.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
+    if back == Black
+    then color $ Color4 (1.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
+    else color $ Color4 (0.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
     renderPrimitive Lines $ do
         vertex $ Vertex3 (-2.0 :: GLdouble) 0.0 0.0
         vertex $ Vertex3 (0.0 :: GLdouble) 0.0 0.0
@@ -191,18 +212,20 @@ arrow = do
             vertex $ Vertex3 (1.0 :: GLdouble) 0.0 0.0
     lineWidth $= old_width
 
-drawArrow :: GLdouble -> Vector3 GLdouble -> IO ()
-drawArrow size location = do
+drawArrow :: GLdouble -> Vector3 GLdouble -> Background -> IO ()
+drawArrow size location back = do
     unsafePreservingMatrix $ do
         translate location
         scale size size size
-        arrow
+        arrow back
 
-drawEdge :: Maybe (Vector3 GLdouble) -> Vector3 GLdouble -> IO ()
-drawEdge Nothing _ = do
+drawEdge :: Maybe (Vector3 GLdouble) -> Vector3 GLdouble -> Background -> IO ()
+drawEdge Nothing _ _ = do
     return ()
-drawEdge (Just up_pos) down_pos = do
-    color $ Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 1.0 1.0
+drawEdge (Just up_pos) down_pos back = do
+    if back == Black
+    then color $ Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 1.0 1.0
+    else color $ Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 0.0 1.0
     renderPrimitive Lines $ do
         vertex $ to_vertex up_pos
         vertex $ to_vertex down_pos
@@ -238,36 +261,42 @@ node_label f font = do
 
 
 getColor :: RewriteSystem s v r
-     => Symbol s v -> EnvironmentRef s v r -> IO (Color4 GLfloat)
+     => Symbol s v -> EnvironmentRef s v r
+        -> IO (Color4 GLfloat, Color4 GLfloat)
 getColor f environment = do
     env <- get environment
-    let (col, cols', gen') = get_color f (colors env) (generator env)
+    let (col_b, col_w, cols', gen') = get_color f (colors env) (generator env)
     environment $= env {generator = gen', colors = cols'}
-    return col
+    return (col_b, col_w)
     where get_color sym [] gen
-              = (new_color, [(sym, new_color)], new_gen)
-                  where (new_color, new_gen) = get_new_color gen
-          get_color sym (c:cs) gen
-              | fst c == sym = (snd c, c : cs, gen)
-              | otherwise    = (c', c : cs', gen')
-                  where (c', cs', gen') = get_color sym cs gen
+              = (new_col_b, new_col_w, [(sym, new_col_b, new_col_w)], new_gen)
+                  where (new_col_b, new_col_w, new_gen) = get_new_color gen
+          get_color sym (c@(g, col_b, col_w):cs) gen
+              | g == sym  = (col_b,  col_w,  c : cs,  gen)
+              | otherwise = (col_b', col_w', c : cs', gen')
+                  where (col_b', col_w', cs', gen') = get_color sym cs gen
           get_new_color gen
-              = (Color4 r_val g_val b_val 1.0, gen_3)
+              = (new_col_b, new_col_w, gen_3)
                   where (r, gen_1) = randomR (0.0, 1.0) gen
                         (g, gen_2) = randomR (0.0, 1.0) gen_1
                         (b, gen_3) = randomR (0.0, 1.0) gen_2
-                        r_val = (r + 1.0) / 2.0
-                        g_val = (g + 1.0) / 2.0
-                        b_val = (b + 1.0) / 2.0
+                        r_val_b = (r + 1.0) / 2.0
+                        g_val_b = (g + 1.0) / 2.0
+                        b_val_b = (b + 1.0) / 2.0
+                        r_val_w = (r + 0.5) / 2.0
+                        g_val_w = (g + 0.5) / 2.0
+                        b_val_w = (b + 0.5) / 2.0
+                        new_col_b = Color4 r_val_b g_val_b b_val_b 1.0
+                        new_col_w = Color4 r_val_w g_val_w b_val_w 1.0
 
 drawNode :: (RewriteSystem s v r, Show s, Show v)
     => Symbol s v -> GLdouble -> Vector3 GLdouble -> EnvironmentRef s v r
        -> IO ()
 drawNode f size location environment = do
-    col <- getColor f environment
+    (col_b, col_w) <- getColor f environment
     env <- get environment
     unsafePreservingMatrix $ do
-        color col
+        color (if background env == Black then col_b else col_w)
         translate location
         scale size size size
         unsafePreservingMatrix $ do
@@ -304,21 +333,26 @@ drawTerm term pos ul dr max_d max_n environment
     | max_d < 0 = do
         return ()
     | fst ul - (2.0 * size) > right pos = do
-        drawEdge (up pos) location
+        env <- get environment
+        drawEdge (up pos) location (background env)
         return ()
     | fst dr + (2.0 * size) < left pos = do
-        drawEdge (up pos) location
+        env <- get environment
+        drawEdge (up pos) location (background env)
         return ()
     | snd dr + (2.0 * size) < depth pos = do
-        drawEdge (up pos) location
+        env <- get environment
+        drawEdge (up pos) location (background env)
         return ()
     | snd ul - (2.0 * size) > depth pos = do
         drawSubterms ss rel_pos ul dr max_d'' max_n environment
     | max_n <= 0 = do
-        drawEdge (up pos) location
+        env <- get environment
+        drawEdge (up pos) location (background env)
         drawSubterms ss rel_pos ul dr max_d' 0 environment
     | otherwise = do
-        drawEdge (up pos) location
+        env <- get environment
+        drawEdge (up pos) location (background env)
         drawSubterms ss rel_pos ul dr max_d' max_n' environment
         drawNode f size location environment
         where location = Vector3 ((left pos + right pos) / 2.0) (depth pos) 0.0
@@ -353,13 +387,14 @@ drawTerms _ _ _ 0 _ _ _ = do
     return ()
 drawTerms (s:ss) slice (l_min, u_max) max_ts max_d max_ns environment
     | s_left + s_width < l_min = do
-        drawArrow arrow_size arrow_loc
+        env <- get environment
+        drawArrow arrow_size arrow_loc (background env)
         drawTerms ss slice' (l_min, u_max) max_ts max_d max_ns environment
     | slice_depth slice + 50.0 < u_max = do
         return ()
     | otherwise = do
         env <- get environment
-        drawArrow arrow_size arrow_loc
+        drawArrow arrow_size arrow_loc (background env)
         drawTerm s pos (vis_ul env) (vis_dr env) max_d max_ns environment
         drawTerms ss slice' (l_min, u_max) max_ts' max_d' max_ns'  environment
         where start_depth = 50.0
@@ -399,17 +434,20 @@ calc_pos (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) zoom
               y_scale = (w' - w) / fromIntegral q
 
 drawMouseSquare :: Bool -> (Position, Position)
-       -> ((GLdouble, GLdouble), (GLdouble, GLdouble)) -> Size -> IO ()
-drawMouseSquare True poses vis size = do
+       -> ((GLdouble, GLdouble), (GLdouble, GLdouble)) -> Size -> Background
+          -> IO ()
+drawMouseSquare True poses vis size back = do
     unsafePreservingMatrix $ do
-        color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
+        if back == Black
+        then color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
+        else color $ Color4 0.0 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 1.0
         let (x_new, y_new, x_new', y_new') = calc_pos poses vis size False
         renderPrimitive LineLoop $ do
             vertex $ Vertex3 x_new  y_new  0.5
             vertex $ Vertex3 x_new  y_new' 0.5
             vertex $ Vertex3 x_new' y_new' 0.5
             vertex $ Vertex3 x_new' y_new  0.5
-drawMouseSquare False _ _ _ = do
+drawMouseSquare False _ _ _ _ = do
     return ()
 
 reshape :: (Signature s, Variables v, RewriteSystem s v r)
@@ -454,10 +492,6 @@ keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
         x' = max x_new x_new'
         y' = max y_new y_new'
     environment $= env {mouse_use = False, vis_ul = (x, y), vis_dr = (x', y')}
-    update_view environment
-keyboardMouse environment (MouseButton RightButton) Up _ _ = do
-    env <- get environment
-    environment $= env {vis_ul = (0.0, 0.0), vis_dr = (2000.0, 1000.0)}
     update_view environment
 keyboardMouse environment (SpecialKey KeyRight) Down _ _ = do
     env <- get environment
@@ -541,7 +575,7 @@ displayMouseSquare environment = do
     env <- get environment
     let poses = (init_pos env, cur_pos env)
         vis   = (vis_ul env, vis_dr env)
-    drawMouseSquare (mouse_use env) poses vis (win_size env)
+    drawMouseSquare (mouse_use env) poses vis (win_size env) (background env)
 
 get_modulus :: RewriteSystem s v r
     => CReduction s v r -> (Integer -> Integer)
@@ -594,6 +628,22 @@ displayError environment err = do
     matrixMode $= Modelview 0
     loadIdentity
     putStrLn $ show err
+
+blackBackground :: (RewriteSystem s v r, Show s, Show v)
+    => EnvironmentRef s v r -> MenuCallback
+blackBackground environment = do
+    clearColor $= Color4 0.0 0.0 0.0 1.0
+    env <- get environment
+    environment $= env {background = Black}
+    update_view environment
+
+whiteBackground :: (RewriteSystem s v r, Show s, Show v)
+    => EnvironmentRef s v r -> MenuCallback
+whiteBackground environment = do
+    clearColor $= Color4 1.0 1.0 1.0 1.0
+    env <- get environment
+    environment $= env {background = White}
+    update_view environment
 
 display :: (RewriteSystem s v r, Show s, Show v)
     => EnvironmentRef s v r -> DisplayCallback
