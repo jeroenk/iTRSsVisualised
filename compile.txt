@@ -1,1 +1,1 @@
-ghc -i.. --make -Wall vis2.hs -o vis2 -L/Users/jketema/tools/ftgl/lib -lftgl
+ghc -i.. --make -Wall visualization.hs -o visualization -L/Users/jketema/tools/ftgl/lib -lftgl

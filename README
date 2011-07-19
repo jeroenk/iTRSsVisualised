@@ -20,3 +20,4 @@ Possible extensions:
 * Zoom in and out with scroll wheel (would require freeglut)
 * Open file dialog for reductions (would require GTK+ or wxWidgets)
 * Different color schemes
+* DSL for definition of reductions
