@@ -24,6 +24,7 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.IORef
 import Data.Maybe
+import Graphics.Rendering.FTGL
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
 import System.Random
@@ -34,18 +35,12 @@ import Utilities
 
 import SignatureAndVariables
 import RuleAndSystem
-import Graphics.Rendering.FTGL
-
-
-
 
 max_zoom :: GLdouble
 max_zoom = 1.6e-5
 
 init_win_size :: Size
 init_win_size = Size 1000 500
-
-
 
 main :: IO ()
 main = do
@@ -87,7 +82,7 @@ main = do
     -- Initialize font
     let font_file = "fonts/FreeSans.ttf"
     font <- loadFontTexture font_file
-    _ <- setFontFaceSize (font) (24 * font_scale) 72
+    _ <- setFontFaceSize font (24 * font_scale) 72
 
     -- Initialize environment
     gen <- newStdGen
@@ -120,7 +115,6 @@ main = do
 
     -- Main loop
     mainLoop
-
 
 zoom_ok :: GLdouble -> GLdouble -> Bool
 zoom_ok x x' = abs (x' - x) >=  visual_width * max_zoom
@@ -288,18 +282,21 @@ displayMouseSquare environment = do
         vis   = (vis_lu env, vis_rd env)
     drawMouseSquare (mouse_use env) poses vis (win_size env) (background env)
 
-
 displayReduction :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> IO ()
 displayReduction environment = do
     env <- get environment
-    when (isNothing $ red_list env) $ do
-        list <- defineNewList Compile $ do
-            drawReduction environment
-        env <- get environment
-        environment $= env {red_list = Just list}
-    env' <- get environment -- Updated by drawReduction
+    when (isNothing $ red_list env) $ do displayReduction' environment
+    env' <- get environment -- Updated by displayReduction'
     callList $ fromJust (red_list env')
+
+displayReduction' :: (Show s, Show v, RewriteSystem s v r)
+    => EnvironmentRef s v r -> IO ()
+displayReduction' environment = do
+    list <- defineNewList Compile $ do
+        drawReduction environment
+    env <- get environment
+    environment $= env {red_list = Just list}
 
 displayError :: E.ErrorCall -> IO ()
 displayError err = do
