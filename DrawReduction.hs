@@ -139,22 +139,27 @@ drawArrow size location back = do
         scale size size size
         arrow back
 
+-- Edge drawing.
 drawEdge :: Maybe (Vector3 GLdouble) -> Vector3 GLdouble -> Background -> IO ()
 drawEdge Nothing _ _ = do
-    return ()
+    return () -- No edge to draw
 drawEdge (Just up_pos) down_pos back = do
-    if back == Black
-    then color $ Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 1.0 1.0
-    else color $ Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 0.0 1.0
+    color $ case back of -- Arbitrarily chosen colors for edges
+        Black -> Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 1.0 1.0
+        White -> Color4 (153.0 / 255.0 :: GLdouble) (153.0 / 255.0) 0.0 1.0
     renderPrimitive Lines $ do
         vertex $ to_vertex up_pos
         vertex $ to_vertex down_pos
-    where to_vertex (Vector3 x y z) = Vertex3 x y (z - 0.5)
+    where -- The edge is moved back as to not overlap with its end nodes
+          to_vertex (Vector3 x y z) = Vertex3 x y (z - 0.5)
 
+-- Node drawing.
 node :: TextureObject -> IO ()
 node node_texture = do
+    -- Make sure we are using the node texture
     textureBinding Texture2D $= Just node_texture
     texture Texture2D $= Enabled
+    -- Draw node
     renderPrimitive TriangleStrip $ do
         texCoord $ TexCoord2 (0.0 :: GLdouble) 0.0
         vertex $ Vertex3 (-1.0 :: GLdouble) (-1.0) 0.0
@@ -169,44 +174,54 @@ node node_texture = do
 node_label :: (Show s, Show v, Signature s, Variables v)
     => Symbol s v -> Font -> IO ()
 node_label f font = do
+    -- Move label in correct position
     rotate (180.0 :: GLdouble) (Vector3 0.0 0.0 1.0)
     rotate (180.0 :: GLdouble) (Vector3 0.0 1.0 0.0)
     scale size size size
     translate pos
     renderFont font (show f) All
-    where size = 0.09 / font_scale :: GLdouble
+    where -- Arbitrarily chosen values to make label look "nice"
+          size = 0.09 / font_scale :: GLdouble
           pos  = Vector3 x y 0.0
               where x = 15.0 * font_scale :: GLdouble
                     y = -3.0 * font_scale :: GLdouble
 
+-- Find the color used for f or generate a new color if not found
 getColor :: RewriteSystem s v r
      => Symbol s v -> EnvironmentRef s v r
         -> IO (Color4 GLfloat, Color4 GLfloat)
 getColor f environment = do
     env <- get environment
-    let (col_b, col_w, cols', gen') = get_color f (colors env) (generator env)
+    let (col_b, col_w, cols', gen') = getColor' f (colors env) (generator env)
     environment $= env {generator = gen', colors = cols'}
     return (col_b, col_w)
-    where get_color sym [] gen
-              = (new_col_b, new_col_w, [(sym, new_col_b, new_col_w)], new_gen)
-                  where (new_col_b, new_col_w, new_gen) = get_new_color gen
-          get_color sym (c@(g, col_b, col_w):cs) gen
-              | g == sym  = (col_b,  col_w,  c : cs,  gen)
-              | otherwise = (col_b', col_w', c : cs', gen')
-                  where (col_b', col_w', cs', gen') = get_color sym cs gen
-          get_new_color gen
-              = (new_col_b, new_col_w, gen_3)
-                  where (r, gen_1) = randomR (0.0, 1.0) gen
-                        (g, gen_2) = randomR (0.0, 1.0) gen_1
-                        (b, gen_3) = randomR (0.0, 1.0) gen_2
-                        r_val_b = (r + 1.0) / 2.0
-                        g_val_b = (g + 1.0) / 2.0
-                        b_val_b = (b + 1.0) / 2.0
-                        r_val_w = (r + 0.5) / 2.0
-                        g_val_w = (g + 0.5) / 2.0
-                        b_val_w = (b + 0.5) / 2.0
-                        new_col_b = Color4 r_val_b g_val_b b_val_b 1.0
-                        new_col_w = Color4 r_val_w g_val_w b_val_w 1.0
+
+getColor' :: (Signature s, Variables v)
+    => Symbol s v -> [SymbolColor s v] -> StdGen
+       -> (Color4 GLfloat, Color4 GLfloat, [SymbolColor s v], StdGen)
+getColor' f [] gen
+    = (new_col_b, new_col_w, [(f, new_col_b, new_col_w)], new_gen)
+    where (new_col_b, new_col_w, new_gen) = newColor gen
+getColor' f (c@(g, col_b, col_w):cs) gen
+    | f == g    = (col_b,  col_w,  c : cs,  gen)
+    | otherwise = (col_b', col_w', c : cs', gen')
+    where (col_b', col_w', cs', gen') = getColor' f cs gen
+
+newColor :: StdGen -> (Color4 GLfloat, Color4 GLfloat, StdGen)
+newColor gen = (new_col_b, new_col_w, gen_3)
+    where (r, gen_1) = randomR (0.0, 1.0) gen
+          (g, gen_2) = randomR (0.0, 1.0) gen_1
+          (b, gen_3) = randomR (0.0, 1.0) gen_2
+          -- Color for black background
+          r_val_b = (r + 1.0) / 2.0
+          g_val_b = (g + 1.0) / 2.0
+          b_val_b = (b + 1.0) / 2.0
+          new_col_b = Color4 r_val_b g_val_b b_val_b 1.0
+          -- Color for white background
+          r_val_w = (r + 0.5) / 2.0
+          g_val_w = (g + 0.5) / 2.0
+          b_val_w = (b + 0.5) / 2.0
+          new_col_w = Color4 r_val_w g_val_w b_val_w 1.0
 
 drawNode :: (Show s, Show v, RewriteSystem s v r)
     => Symbol s v -> Maybe Position -> GLdouble -> Vector3 GLdouble
@@ -214,10 +229,12 @@ drawNode :: (Show s, Show v, RewriteSystem s v r)
 drawNode f redex_p size location environment = do
     (col_b, col_w) <- getColor f environment
     env <- get environment
+    let red  = Color4 1.0 0.0 0.0 1.0
+        col  = case background env of
+            Black -> col_b
+            White -> col_w
+        col' = if isJust redex_p && fromJust redex_p == [] then red else col
     unsafePreservingMatrix $ do
-        let red  = Color4 1.0 0.0 0.0 1.0
-            col  = if background env == Black then col_b else col_w
-            col' = if isJust redex_p && fromJust redex_p == [] then red else col
         color col'
         translate location
         scale size size size
@@ -226,23 +243,23 @@ drawNode f redex_p size location environment = do
         unsafePreservingMatrix $ do
             node_label f (sym_font env)
 
+-- Subterm drawing.
 get_subterms :: (Signature s, Variables v)
     => (Term s v) -> [Term s v]
 get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
 drawSubterms :: (Show s, Show v, RewriteSystem s v r)
-    => [Term s v] -> Maybe Position -> RelPositionData -> (GLdouble, GLdouble)
-       -> (GLdouble, GLdouble) -> Int -> Int -> EnvironmentRef s v r -> IO ()
+    => [Term s v] -> Maybe Position -> RelPositionData -> VisiblePos
+       -> VisiblePos -> Int -> Int -> EnvironmentRef s v r -> IO ()
 drawSubterms [] _ _ _ _ _ _ _ = do
     return ()
-drawSubterms (s:ss) redex_p rel_pos ul dr max_d max_n environment = do
-    drawTerm s redex_p' pos ul dr max_d max_n environment
-    drawSubterms ss redex_p'' rel_pos' ul dr max_d max_n environment
-    where margin = 0.0
-          pos    = Pos {
-              left  = rel_left rel_pos + margin,
-              right = rel_left rel_pos + rel_inc rel_pos - margin,
+drawSubterms (t:ts) redex_p rel_pos lu rd max_d max_ns environment = do
+    drawTerm t redex_p' t_pos lu rd max_d max_ns environment
+    drawSubterms ts redex_p'' rel_pos' lu rd max_d max_ns environment
+    where t_pos = Pos {
+              left  = rel_left rel_pos,
+              right = rel_left rel_pos + rel_inc rel_pos,
               depth = rel_depth rel_pos,
               up    = rel_up rel_pos
               }
@@ -257,6 +274,7 @@ drawSubterms (s:ss) redex_p rel_pos ul dr max_d max_n environment = do
           new_position (Just [])
               = (Nothing, Nothing)
 
+-- Term drawing.
 drawTerm :: (Show s, Show v, RewriteSystem s v r)
     => Term s v -> Maybe Position -> PositionData -> VisiblePos
        -> VisiblePos -> Int -> Int -> EnvironmentRef s v r -> IO ()

@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 module Environment (
     VisiblePos,
     Background(Black, White),
+    SymbolColor,
     Environment(Env, env_red, red_list, win_size, vis_lu, vis_rd, background,
                 colors, generator, mouse_use, init_pos, cur_pos, node_tex,
                 sym_font),
