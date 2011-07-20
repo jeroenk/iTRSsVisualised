@@ -53,6 +53,10 @@ visual_width = 2000.0
 visual_height :: GLdouble
 visual_height = 1000.0
 
+-- Distance of the top of the drawing area to the root node of a term.
+top_margin :: GLdouble
+top_margin = 50.0
+
 -- Maximum number of terms to draw from a reduction.
 max_terms :: Int
 max_terms = 8
@@ -84,12 +88,13 @@ data SlicePosData
         slice_arrow  :: GLdouble  -- Scale factor for arrow point to next term
       }
 
+-- Data type indicating the drawing area used to draw a particulat subterm.
 data PositionData
     = Pos {
-        left  :: GLdouble,
-        right :: GLdouble,
-        depth :: GLdouble,
-        up    :: Maybe (Vector3 GLdouble)
+        left  :: GLdouble, -- Left side of the drawing area
+        right :: GLdouble, -- Right side of the drawing area
+        depth :: GLdouble, -- Depth (or height) of the drawing area
+        up    :: Maybe (Vector3 GLdouble) -- Position of parent node (if any)
       }
 
 data RelPositionData
@@ -100,16 +105,20 @@ data RelPositionData
         rel_up    :: Maybe (Vector3 GLdouble)
       }
 
+-- Arrow drawing
 arrow :: Background -> IO ()
 arrow back = do
+    -- Save line width and set new line width
     old_width <- get lineWidth
     lineWidth $= 2.0
-    if back == Black
-    then color $ Color4 (1.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
-    else color $ Color4 (0.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
+    color $ case back of -- Arbitrarily chosen colors for arrows
+        Black -> Color4 (1.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
+        White -> Color4 (0.0 :: GLdouble) (153.0 / 255.0) (153.0 / 255.0) 1.0
+    -- Draw horizontal line
     renderPrimitive Lines $ do
         vertex $ Vertex3 (-2.0 :: GLdouble) 0.0 0.0
         vertex $ Vertex3 (0.0 :: GLdouble) 0.0 0.0
+    -- Draw arrow head
     unsafePreservingMatrix $ do
         rotate (150.0 :: GLdouble) (Vector3 0.0 0.0 (-1.0))
         renderPrimitive Lines $ do
@@ -120,6 +129,7 @@ arrow back = do
         renderPrimitive Lines $ do
             vertex $ Vertex3 (0.0 :: GLdouble) 0.0 0.0
             vertex $ Vertex3 (1.0 :: GLdouble) 0.0 0.0
+    -- Restore old line width
     lineWidth $= old_width
 
 drawArrow :: GLdouble -> Vector3 GLdouble -> Background -> IO ()
@@ -248,8 +258,8 @@ drawSubterms (s:ss) redex_p rel_pos ul dr max_d max_n environment = do
               = (Nothing, Nothing)
 
 drawTerm :: (Show s, Show v, RewriteSystem s v r)
-    => Term s v -> Maybe Position -> PositionData -> (GLdouble, GLdouble)
-       -> (GLdouble, GLdouble) -> Int -> Int -> EnvironmentRef s v r -> IO ()
+    => Term s v -> Maybe Position -> PositionData -> VisiblePos
+       -> VisiblePos -> Int -> Int -> EnvironmentRef s v r -> IO ()
 drawTerm term redex_p pos ul dr max_d max_n environment
     | max_d < 0 = do
         return ()
@@ -299,51 +309,63 @@ drawTerm term redex_p pos ul dr max_d max_n environment
                   rel_up    = Just location
                   }
 
+-- Recursively draw the terms of a reduction as far as they exist and would
+-- be visible.
 drawTerms :: (Show s, Show v, RewriteSystem s v r)
-    => [Term s v] -> [Position] -> SlicePosData -> (GLdouble, GLdouble) -> Int
-       -> Int -> Int -> EnvironmentRef s v r -> IO ()
-drawTerms [] [] _ _ _ _ _ _ = do
+    => [Term s v] -> [Position] -> SlicePosData -> VisiblePos -> VisiblePos
+       -> Int -> Int -> Int -> EnvironmentRef s v r -> IO ()
+ -- No terms left to draw
+drawTerms [] _ _ _ _ _ _ _ _ = do
     return ()
-drawTerms _ _ _ _ 0 _ _ _ = do
+-- A sufficient number of terms have been drawn
+drawTerms _ _ _ _ _ 0 _ _ _ = do
     return ()
-drawTerms (s:ss) (p:ps) slice (l_min, u_max) max_ts max_d max_ns environment
-    | s_left + s_width < l_min = do
-        env <- get environment
-        drawArrow arrow_size arrow_loc (background env)
-        drawTerms ss ps slice' (l_min, u_max) max_ts max_d max_ns environment
-    | slice_height slice + 50.0 < u_max = do
+-- There were an insufficient number of redex positions (should not occur)
+drawTerms  (_:_) [] _ _ _ _ _ _ _ = do
+    error "Number of terms and positions differ"
+-- Normal case where terms should be drawn
+drawTerms ts ps slice lu@(_, u_max) rd max_ts max_d max_ns environment
+    | slice_height slice + top_margin < u_max = do
         return ()
     | otherwise = do
         env <- get environment
-        drawArrow arrow_size arrow_loc (background env)
-        drawTerm s p' pos (vis_lu env) (vis_rd env) max_d max_ns environment
-        drawTerms ss ps slice' (l_min, u_max) max_ts' max_d' max_ns' environment
-        where start_depth = 50.0
-              p'          = Just p
-              s_left      = slice_left slice
-              s_right     = s_left + s_width
-              s_width     = slice_width slice
-              s_depth     = slice_height slice
-              margin      = s_width * 0.025
-              max_ts'     = max_ts - 1
-              max_d'      = max 2 (max_d - 1)
-              max_ns'     = max_ns - 1
-              arrow_loc   = Vector3 s_right start_depth 0.0
-              arrow_size  = slice_arrow slice
-              slice' = SlicePos {
-                  slice_left  = s_right,
-                  slice_width = s_width / 2.0,
-                  slice_height = s_depth / 2.0,
-                  slice_arrow = arrow_size / 2.0
+        drawArrow arrow_size arrow_pos (background env)
+        drawTerms' ts ps slice lu rd max_ts max_d max_ns environment
+        where arrow_size  = slice_arrow slice
+              arrow_pos   = Vector3 slice_right top_margin 0.0
+              slice_right = slice_left slice + slice_width slice
+
+drawTerms' :: (Show s, Show v, RewriteSystem s v r)
+    => [Term s v] -> [Position] -> SlicePosData -> VisiblePos -> VisiblePos
+       -> Int -> Int -> Int -> EnvironmentRef s v r -> IO ()
+drawTerms' ts ps slice lu@(l_min, _) rd max_ts max_d max_ns environment
+    | slice_right < l_min = do -- Current term falls outside the window
+        drawTerms ts' ps' slice' lu rd max_ts max_d max_ns environment
+    | otherwise = do
+        drawTerm t (Just p) t_pos lu rd max_d max_ns environment
+        drawTerms ts' ps' slice' lu rd max_ts' max_d' max_ns' environment
+        where -- Existence of head and tail is guarenteed by drawTerms
+              t:ts' = ts
+              p:ps' = ps
+              -- Additional slice data
+              slice_right = slice_left slice + slice_width slice
+              margin      = slice_width slice * 0.025 -- Margin not to draw in
+              -- New values for remaining terms
+              max_ts' = max_ts - 1
+              max_d'  = max 2 (max_d - 1)
+              max_ns' = max_ns - 1
+              slice' = SlicePos { -- For the next term we have half the space
+                  slice_left   = slice_right,
+                  slice_width  = slice_width slice / 2.0,
+                  slice_height = slice_height slice / 2.0,
+                  slice_arrow  = slice_arrow slice / 2.0
                   }
-              pos = Pos {
-                  left  = s_left + margin,
-                  right = s_right - margin,
-                  depth = start_depth,
+              t_pos = Pos {
+                  left  = slice_left slice + margin,
+                  right = slice_right - margin,
+                  depth = top_margin,
                   up    = Nothing
                   }
-drawTerms  _ _ _ _ _ _ _ _ = do
-    error "Number of terms and positions differ"
 
 -- Helper functions to extract the needed data from reductions.
 get_modulus :: RewriteSystem s v r
@@ -368,11 +390,13 @@ drawReduction :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> IO ()
 drawReduction environment = do
     env <- get environment
-    let (ts, ps) = get_terms_and_positions (env_red env)
+    let lu = vis_lu env
+        rd = vis_rd env
+        (ts, ps) = get_terms_and_positions (env_red env)
         slice    = SlicePos {
             slice_left   = 0.0,
-            slice_width  = (visual_width / 2.0),
-            slice_height = (visual_height - 50.0),
-            slice_arrow  = 40.0
+            slice_width  = (visual_width / 2.0), -- Use half for first term
+            slice_height = (visual_height - top_margin),
+            slice_arrow  = 40.0 -- Arbitrary size for first arrow
             }
-    drawTerms ts ps slice (vis_lu env) max_terms max_depth max_nodes environment
+    drawTerms ts ps slice lu rd max_terms max_depth max_nodes environment

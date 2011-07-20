@@ -39,8 +39,8 @@ import Graphics.Rendering.FTGL
 
 
 
-maximum_zoom :: GLdouble
-maximum_zoom = 1.6e-5
+max_zoom :: GLdouble
+max_zoom = 1.6e-5
 
 init_win_size :: Size
 init_win_size = Size 1000 500
@@ -123,15 +123,15 @@ main = do
 
 
 zoom_ok :: GLdouble -> GLdouble -> Bool
-zoom_ok x x' = abs (x' - x) >=  visual_width * maximum_zoom
+zoom_ok x x' = abs (x' - x) >=  visual_width * max_zoom
 
 limit_pos :: (GLdouble, GLdouble, GLdouble, GLdouble)
     -> (GLdouble, GLdouble, GLdouble, GLdouble)
 limit_pos (x, y, x', y')
     | zoom_ok x x' = (x, y, x', y')
     | otherwise    = (x, y, x_new', y_new')
-    where x_new' = x + visual_width * (if x' < x then -maximum_zoom else maximum_zoom)
-          y_new' = y + visual_height * (if y' < y then -maximum_zoom else maximum_zoom)
+    where x_new' = x + visual_width * (if x' < x then -max_zoom else max_zoom)
+          y_new' = y + visual_height * (if y' < y then -max_zoom else max_zoom)
 
 calc_pos :: (Position, Position) -> ((GLdouble, GLdouble), (GLdouble, GLdouble))
        -> Size -> (GLdouble, GLdouble, GLdouble, GLdouble)
