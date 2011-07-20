@@ -15,6 +15,7 @@ Data-Files:
 
 Executable visualization
     Build-Depends:
+        array >= 0.3,
         base ==4.*,
         bitmap-opengl ==0.0.0,
         directory >= 1.1,

@@ -35,7 +35,7 @@ import System.Process
 
 import Paths_Visualization
 
--- Try to find a file by probing both the current and data directories.
+-- Try to find a file by probing both the current and data directory.
 prefix_path :: FilePath -> IO FilePath
 prefix_path s = do
     file_ok <- doesFileExist s
