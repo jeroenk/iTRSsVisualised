@@ -43,7 +43,7 @@ import Environment
 
 -- Scaling of fonts applied during the drawing of node labels.
 font_scale :: Num b => b
-font_scale = fromIntegral (4 :: Int)
+font_scale = fromIntegral (8 :: Int)
 
 -- Width of the drawing area used by drawReduction.
 visual_width :: GLdouble
@@ -88,21 +88,22 @@ data SlicePosData
         slice_arrow  :: GLdouble  -- Scale factor for arrow point to next term
       }
 
--- Data type indicating the drawing area used to draw a particulat subterm.
+-- Data type indicating the drawing area used to draw a particular subterm.
 data PositionData
     = Pos {
-        left  :: GLdouble, -- Left side of the drawing area
-        right :: GLdouble, -- Right side of the drawing area
-        depth :: GLdouble, -- Depth (or height) of the drawing area
-        up    :: Maybe (Vector3 GLdouble) -- Position of parent node (if any)
+        left   :: GLdouble, -- Left side of the drawing area
+        right  :: GLdouble, -- Right side of the drawing area
+        height :: GLdouble, -- Height of the drawing area
+        up     :: Maybe (Vector3 GLdouble) -- Position of parent node
       }
 
+-- Data type indicating the relative space used by a subterm.
 data RelPositionData
     = RelPos {
-        rel_left  :: GLdouble,
-        rel_inc   :: GLdouble,
-        rel_depth :: GLdouble,
-        rel_up    :: Maybe (Vector3 GLdouble)
+        rel_left   :: GLdouble, -- Left side of the area
+        rel_inc    :: GLdouble, -- Width of the area
+        rel_height :: GLdouble, -- Height of the area
+        rel_up     :: Maybe (Vector3 GLdouble) -- Position of parent node
       }
 
 -- Arrow drawing
@@ -226,7 +227,7 @@ newColor gen = (new_col_b, new_col_w, gen_3)
 drawNode :: (Show s, Show v, RewriteSystem s v r)
     => Symbol s v -> Maybe Position -> GLdouble -> Vector3 GLdouble
        -> EnvironmentRef s v r -> IO ()
-drawNode f redex_p size location environment = do
+drawNode f redex_p size pos environment = do
     (col_b, col_w) <- getColor f environment
     env <- get environment
     let red  = Color4 1.0 0.0 0.0 1.0
@@ -236,7 +237,7 @@ drawNode f redex_p size location environment = do
         col' = if isJust redex_p && fromJust redex_p == [] then red else col
     unsafePreservingMatrix $ do
         color col'
-        translate location
+        translate pos
         scale size size size
         unsafePreservingMatrix $ do
             node (node_tex env)
@@ -254,77 +255,75 @@ drawSubterms :: (Show s, Show v, RewriteSystem s v r)
        -> VisiblePos -> Int -> Int -> EnvironmentRef s v r -> IO ()
 drawSubterms [] _ _ _ _ _ _ _ = do
     return ()
-drawSubterms (t:ts) redex_p rel_pos lu rd max_d max_ns environment = do
-    drawTerm t redex_p' t_pos lu rd max_d max_ns environment
-    drawSubterms ts redex_p'' rel_pos' lu rd max_d max_ns environment
+drawSubterms (t:ts) p rel_pos lu rd max_d max_ns environment = do
+    drawTerm t p' t_pos lu rd max_d max_ns environment
+    drawSubterms ts p'' rel_pos' lu rd max_d max_ns environment
     where t_pos = Pos {
-              left  = rel_left rel_pos,
-              right = rel_left rel_pos + rel_inc rel_pos,
-              depth = rel_depth rel_pos,
-              up    = rel_up rel_pos
+              left   = rel_left rel_pos,
+              right  = rel_left rel_pos + rel_inc rel_pos,
+              height = rel_height rel_pos,
+              up     = rel_up rel_pos
               }
           rel_pos' = rel_pos {rel_left = rel_left rel_pos + rel_inc rel_pos}
-          (redex_p', redex_p'') = new_position redex_p
+          (p', p'') = new_position p
           new_position Nothing
               = (Nothing, Nothing)
-          new_position (Just (p:ps))
-              | p == 1    = (Just ps, Nothing)
-              | p > 1     = (Nothing, Just (p - 1:ps))
+          new_position (Just (q:qs))
+              | q == 1    = (Just qs, Nothing)
+              | q > 1     = (Nothing, Just (q - 1:qs))
               | otherwise = error "Illegal position"
           new_position (Just [])
               = (Nothing, Nothing)
 
 -- Term drawing.
+--
+-- We do not draw the root node of a term in case it falls outside a certain
+-- small distance from the visible are. We do no use the exact visible area
+-- to ensure nodes and node labels are actually drawn in case they are
+-- they are partially visible.
 drawTerm :: (Show s, Show v, RewriteSystem s v r)
     => Term s v -> Maybe Position -> PositionData -> VisiblePos
        -> VisiblePos -> Int -> Int -> EnvironmentRef s v r -> IO ()
-drawTerm term redex_p pos ul dr max_d max_n environment
+drawTerm t p t_pos lu@(l_min, u_max) rd@(r_max, d_min) max_d max_ns environment
     | max_d < 0 = do
         return ()
-    | fst ul - (2.0 * size) > right pos = do
+    | l_min - 2.0 * n_size > right t_pos
+      || r_max + 2.0 * n_size < left t_pos
+      || d_min + 2.0 * n_size < height t_pos = do
         env <- get environment
-        drawEdge (up pos) location (background env)
-        return ()
-    | fst dr + (2.0 * size) < left pos = do
+        drawEdge (up t_pos) n_pos (background env)
+    | u_max - (2.0 * n_size) > height t_pos = do
+        if up t_pos == Nothing
+        then drawSubterms ts p rel_pos lu rd max_d max_ns environment
+        else drawSubterms ts p rel_pos lu rd (max_d - 1) max_ns environment
+    | max_ns <= 0 = do
         env <- get environment
-        drawEdge (up pos) location (background env)
-        return ()
-    | snd dr + (2.0 * size) < depth pos = do
-        env <- get environment
-        drawEdge (up pos) location (background env)
-        return ()
-    | snd ul - (2.0 * size) > depth pos = do
-        drawSubterms ss redex_p rel_pos ul dr max_d'' max_n environment
-    | max_n <= 0 = do
-        env <- get environment
-        drawEdge (up pos) location (background env)
-        drawSubterms ss redex_p rel_pos ul dr max_d' 0 environment
+        drawEdge (up t_pos) n_pos (background env)
+        drawSubterms ts p rel_pos lu rd (max_d - 1) 0 environment
     | otherwise = do
         env <- get environment
-        drawEdge (up pos) location (background env)
-        drawSubterms ss redex_p rel_pos ul dr max_d' max_n' environment
-        drawNode f redex_p size location environment
-        where location = Vector3 ((left pos + right pos) / 2.0) (depth pos) 0.0
-              f        = root_symbol term
-              ss       = get_subterms term
-              max_d'   = max_d - 1
-              max_d''  = if up pos == Nothing then max_d' else max_d
-              max_n'   = max_n - 1
-              count    = length ss
-              d_count  = fromIntegral count
-              width    = right pos - left pos
-              size     = width * 0.02
-              rel_pos  = RelPos {
-                  rel_left  = if count > 1
-                              then left pos
-                              else (left pos + width / 4.0),
-                  rel_inc   = if count > 1
-                              then width / d_count
-                              else (width / 2.0),
-                  rel_depth = if count > 1
-                              then depth pos + width * (d_count - 1.0) / d_count
-                              else depth pos + width / 2.0,
-                  rel_up    = Just location
+        drawEdge (up t_pos) n_pos (background env)
+        drawSubterms ts p rel_pos lu rd (max_d - 1) (max_ns - 1) environment
+        drawNode (root_symbol t) p n_size n_pos environment
+        where middle = (left t_pos + right t_pos) / 2.0
+              width  = right t_pos - left t_pos
+              n_pos  = Vector3 middle (height t_pos) 0.0
+              n_size = width * 0.02 -- Node size relative to size drawing area
+              ts     = get_subterms t
+              count  = fromIntegral (length ts)
+              -- Divide remaining space over the subterms
+              rel_pos = if length ts > 1
+                  then RelPos {
+                      rel_left   = left t_pos,
+                      rel_inc    = width / count,
+                      rel_height = height t_pos + width * (count - 1.0) / count,
+                      rel_up     = Just n_pos
+                  }
+                  else RelPos { -- Special case for a single subterm
+                      rel_left   = left t_pos + width / 4.0,
+                      rel_inc    = width / 2.0,
+                      rel_height = height t_pos + width / 2.0,
+                      rel_up     = Just n_pos
                   }
 
 -- Recursively draw the terms of a reduction as far as they exist and would
@@ -379,10 +378,10 @@ drawTerms' ts ps slice lu@(l_min, _) rd max_ts max_d max_ns environment
                   slice_arrow  = slice_arrow slice / 2.0
                   }
               t_pos = Pos {
-                  left  = slice_left slice + margin,
-                  right = slice_right - margin,
-                  depth = top_margin,
-                  up    = Nothing
+                  left   = slice_left slice + margin,
+                  right  = slice_right - margin,
+                  height = top_margin,
+                  up     = Nothing
                   }
 
 -- Helper functions to extract the needed data from reductions.
