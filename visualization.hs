@@ -20,19 +20,17 @@ module Main (
     main
 ) where
 
-import Codec.Image.STB
 import qualified Control.Exception as E
 import Control.Monad
-import Data.Bitmap.OpenGL
 import Data.IORef
 import Data.Maybe
 import Graphics.Rendering.OpenGL
 import Graphics.Rendering.FTGL
 import Graphics.UI.GLUT hiding (Font)
-import System.Directory
-import System.Plugins hiding (Symbol)
-import System.Process
 import System.Random
+
+import Environment
+import Utilities
 
 import SignatureAndVariables
 import Term
@@ -40,45 +38,9 @@ import qualified PositionAndSubterm as P
 import RuleAndSystem
 import SystemOfNotation
 import Reduction
-import DynamicReduction
-
-import Paths_Visualization
 
 import Array
 import List
-
--- Mapping from a symbol to a color. The first color represents the one used
--- on a black background and the second represents the one used on a white
--- background.
-type SymbolColor s v = (Symbol s v, Color4 GLfloat, Color4 GLfloat)
-
-data Background
-    = Black
-    | White
-
-instance Eq Background where
-    Black == Black = True
-    White == White = True
-    _ == _         = False
-
-data RewriteSystem s v r => Environment s v r
-    = Env {
-        env_red    :: CReduction s v r,
-        generator  :: StdGen,
-        win_size   :: Size,
-        vis_ul     :: (GLdouble, GLdouble),
-        vis_dr     :: (GLdouble, GLdouble),
-        background :: Background,
-        colors     :: [SymbolColor s v],
-        mouse_use  :: Bool,
-        init_pos   :: Position,
-        cur_pos    :: Position,
-        node_tex   :: TextureObject,
-        sym_font   :: Font,
-        red_list   :: Maybe DisplayList
-      }
-
-type EnvironmentRef s v r = IORef (Environment s v r)
 
 data SlicePosData
     = SlicePos {
@@ -125,27 +87,6 @@ init_win_size = Size 1000 500
 font_scale :: Num b => b
 font_scale = fromIntegral (4 :: Int)
 
-loadNodeTexture :: String -> IO TextureObject
-loadNodeTexture s = do
-    stat <- loadImage s
-    case stat of
-        Left  err -> error $ "loadNode: " ++ err
-        Right img -> makeSimpleBitmapTexture img
-
-loadReduction :: String -> IO (DynamicReduction)
-loadReduction s = do
-    let to_string = foldr (\x y -> x ++ "\n" ++ y) ""
-    putStrLn ("Compiling " ++ s)
-    make_stat <- makeAll (s ++ ".hs") ["-i.."]
-    case make_stat of
-        MakeFailure err -> error $ to_string err
-        MakeSuccess _ _ -> putStrLn ("Done compiling " ++ s)
-    load_stat <- load (s ++ ".o") [".."] [] "c_reduction"
-    reduction <- case load_stat of
-        LoadFailure err -> error $ to_string err
-        LoadSuccess _ v -> return v
-    _ <- runCommand "rm -f *.o *.hi"
-    return reduction
 
 main :: IO ()
 main = do
@@ -181,33 +122,30 @@ main = do
     hint LineSmooth $= Nicest
 
     -- Initialize texture
-    let node = "node.png"
-    dir <- getDataDir
-    file_ok <- doesFileExist node
-    tex <- loadNodeTexture $ (if file_ok then "" else dir ++ "/") ++ node
+    let node_file = "node.png"
+    tex <- loadImageTexture node_file
 
     -- Initialize font
-    let font = "fonts/FreeSans.ttf"
-    file_ok <- doesFileExist font
-    font <- createTextureFont $ (if file_ok then "" else dir ++ "/") ++ font
+    let font_file = "fonts/FreeSans.ttf"
+    font <- loadFontTexture font_file
     _ <- setFontFaceSize font (24 * font_scale) 72
 
     -- Initialize environment
     gen <- newStdGen
     environment <- newIORef $ Env {
         env_red    = red,
-        generator  = gen,
+        red_list   = Nothing,
         win_size   = init_win_size,
-        vis_ul     = (0.0, 0.0),
-        vis_dr     = (2000.0, 1000.0),
+        vis_lu     = (0.0, 0.0),
+        vis_rd     = (2000.0, 1000.0),
         background = Black,
         colors     = [],
+        generator  = gen,
         mouse_use  = False,
         init_pos   = Position 0 0,
         cur_pos    = Position 0 0,
         node_tex   = tex,
-        sym_font   = font,
-        red_list   = Nothing
+        sym_font   = font
         }
 
     -- Initialize callbacks
@@ -440,7 +378,7 @@ drawTerms (s:ss) (p:ps) slice (l_min, u_max) max_ts max_d max_ns environment
     | otherwise = do
         env <- get environment
         drawArrow arrow_size arrow_loc (background env)
-        drawTerm s p' pos (vis_ul env) (vis_dr env) max_d max_ns environment
+        drawTerm s p' pos (vis_lu env) (vis_rd env) max_d max_ns environment
         drawTerms ss ps slice' (l_min, u_max) max_ts' max_d' max_ns' environment
         where start_depth = 50.0
               p'          = Just p
@@ -525,8 +463,8 @@ update_view environment = do
     env <- get environment
     when (isJust $ red_list env) $ deleteObjectNames [fromJust (red_list env)]
     environment $= env {red_list = Nothing}
-    let ul = vis_ul env
-        dr = vis_dr env
+    let ul = vis_lu env
+        dr = vis_rd env
     matrixMode $= Projection
     loadIdentity
     ortho (fst ul) (fst dr) (snd dr) (snd ul) (-1.0) 1.0
@@ -543,63 +481,63 @@ keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
 keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
     let poses = (init_pos env, cur_pos env)
-        vis   = (vis_ul env, vis_dr env)
+        vis   = (vis_lu env, vis_rd env)
     let (x_new, y_new, x_new', y_new') = calc_pos poses vis (win_size env)
         x  = min x_new x_new'
         y  = min y_new y_new'
         x' = max x_new x_new'
         y' = max y_new y_new'
-    environment $= env {mouse_use = False, vis_ul = (x, y), vis_dr = (x', y')}
+    environment $= env {mouse_use = False, vis_lu = (x, y), vis_rd = (x', y')}
     update_view environment
 keyboardMouse environment (SpecialKey KeyRight) Down _ _ = do
     env <- get environment
-    let (x,  y)  = vis_ul env
-        (x', y') = vis_dr env
+    let (x,  y)  = vis_lu env
+        (x', y') = vis_rd env
         move     = (x' - x) * 0.05
-    environment $= env {vis_ul = (x + move, y), vis_dr = (x' + move, y')}
+    environment $= env {vis_lu = (x + move, y), vis_rd = (x' + move, y')}
     update_view environment
 keyboardMouse environment (SpecialKey KeyLeft) Down _ _ = do
     env <- get environment
-    let (x,  y)  = vis_ul env
-        (x', y') = vis_dr env
+    let (x,  y)  = vis_lu env
+        (x', y') = vis_rd env
         move     = (x' - x) * 0.05
-    environment $= env {vis_ul = (x - move, y), vis_dr = (x' - move, y')}
+    environment $= env {vis_lu = (x - move, y), vis_rd = (x' - move, y')}
     update_view environment
 keyboardMouse environment (SpecialKey KeyUp) Down _ _ = do
     env <- get environment
-    let (x,  y)  = vis_ul env
-        (x', y') = vis_dr env
+    let (x,  y)  = vis_lu env
+        (x', y') = vis_rd env
         move     = (y' - y) * 0.05
-    environment $= env {vis_ul = (x, y - move), vis_dr = (x', y' - move)}
+    environment $= env {vis_lu = (x, y - move), vis_rd = (x', y' - move)}
     update_view environment
 keyboardMouse environment (SpecialKey KeyDown) Down _ _ = do
     env <- get environment
-    let (x,  y)  = vis_ul env
-        (x', y') = vis_dr env
+    let (x,  y)  = vis_lu env
+        (x', y') = vis_rd env
         move     = (y' - y) * 0.05
-    environment $= env {vis_ul = (x, y + move), vis_dr = (x', y' + move)}
+    environment $= env {vis_lu = (x, y + move), vis_rd = (x', y' + move)}
     update_view environment
 keyboardMouse environment (Char '+') Down _ _ = do
     env <- get environment
-    let (x,  y)  = vis_ul env
-        (x', y') = vis_dr env
+    let (x,  y)  = vis_lu env
+        (x', y') = vis_rd env
         x_diff = if zoom_ok x x' then (x' - x) * 0.05 else 0.0
         y_diff = if zoom_ok x x' then (y' - y) * 0.05 else 0.0
-    environment $= env {vis_ul = (x  + x_diff, y  + y_diff),
-                        vis_dr = (x' - x_diff, y' - y_diff)}
+    environment $= env {vis_lu = (x  + x_diff, y  + y_diff),
+                        vis_rd = (x' - x_diff, y' - y_diff)}
     update_view environment
 keyboardMouse environment (Char '-') Down _ _ = do
     env <- get environment
-    let (x,  y)  = vis_ul env
-        (x', y') = vis_dr env
+    let (x,  y)  = vis_lu env
+        (x', y') = vis_rd env
         x_diff = (x' - x) * 0.05
         y_diff = (y' - y) * 0.05
-    environment $= env {vis_ul = (x  - x_diff, y  - y_diff),
-                        vis_dr = (x' + x_diff, y' + y_diff)}
+    environment $= env {vis_lu = (x  - x_diff, y  - y_diff),
+                        vis_rd = (x' + x_diff, y' + y_diff)}
     update_view environment
 keyboardMouse environment (Char 'r') Down _ _ = do
     env <- get environment
-    environment $= env {vis_ul = (0.0, 0.0), vis_dr = (2000.0, 1000.0)}
+    environment $= env {vis_lu = (0.0, 0.0), vis_rd = (2000.0, 1000.0)}
     update_view environment
 keyboardMouse _ _ _ _ _ = do
     return ()
@@ -632,7 +570,7 @@ displayMouseSquare :: RewriteSystem s v r
 displayMouseSquare environment = do
     env <- get environment
     let poses = (init_pos env, cur_pos env)
-        vis   = (vis_ul env, vis_dr env)
+        vis   = (vis_lu env, vis_rd env)
     drawMouseSquare (mouse_use env) poses vis (win_size env) (background env)
 
 get_modulus :: RewriteSystem s v r
@@ -657,7 +595,7 @@ drawReduction environment = do
                   ts      = genericTake (phi modulus) (get_terms $ env_red env)
                   ps      = get_positions $ env_red env
                   slice   = SlicePos 0.0 1000.0 950.0 40.0
-                  ul      = vis_ul env
+                  ul      = vis_lu env
                   max_ts  = maximum_terms
                   max_d   = maximum_depth
                   max_ns  = maximum_nodes

@@ -28,3 +28,4 @@ Executable visualization
         stb-image ==0.2
     Main-Is: visualization.hs
     HS-Source-Dirs: ., ..
+    GHC-Options: -Wall
