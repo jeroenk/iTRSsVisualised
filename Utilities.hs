@@ -30,6 +30,7 @@ import Data.Bitmap.OpenGL
 import Graphics.Rendering.FTGL
 import Graphics.Rendering.OpenGL
 import System.Directory
+import System.FilePath
 import System.Plugins
 import System.Process
 
@@ -43,7 +44,7 @@ prefix_path s = do
         True  -> return s
         False -> do
             data_dir <- getDataDir
-            let s' = data_dir ++ "/" ++ s
+            let s' = data_dir ++ pathSeparator:s
             file_ok' <- doesFileExist s'
             if file_ok' then return s' else error $ "Cannot find " ++ s
 

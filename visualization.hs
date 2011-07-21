@@ -27,6 +27,7 @@ import Data.Maybe
 import Graphics.Rendering.FTGL
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
+import System.FilePath
 import System.Random
 
 import DrawReduction
@@ -80,7 +81,7 @@ main = do
     tex <- loadImageTexture node_file
 
     -- Initialize font
-    let font_file = "fonts/FreeSans.ttf"
+    let font_file = "fonts" ++ pathSeparator:"FreeSans.ttf"
     font <- loadFontTexture font_file
     _ <- setFontFaceSize font (24 * font_scale) 72
 

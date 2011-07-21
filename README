@@ -52,7 +52,7 @@ The program can be compiled with:
 Depending on the installation location of the dependencies --user may have to
 be pass to configure.
 
-Optionally the program can be installed:
+Optionally the program can be installed with:
 
   ./Setup.lhs install
 

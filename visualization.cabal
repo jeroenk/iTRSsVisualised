@@ -3,7 +3,7 @@ Version:       0.1
 Cabal-Version: >= 1.6
 Author:        Jeroen Ketema
 License:       OtherLicense
-Synopsis:      Visualization fo infinite reductions
+Synopsis:      Primitive visualization of infinite reductions
 Category:      Tools
 Build-Type:    Simple
 Stability:     Alpha
@@ -19,6 +19,7 @@ Executable visualization
         base ==4.*,
         bitmap-opengl ==0.0.0,
         directory >= 1.1,
+        filepath >= 1.2,
         FTGL ==1.333,
         GLUT >= 2.1,
         haskell98,
