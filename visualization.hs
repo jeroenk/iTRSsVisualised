@@ -31,14 +31,13 @@ import System.FilePath
 import System.Random
 
 import DrawReduction
+import DrawMouseSquare
 import Environment
 import Utilities
 
 import SignatureAndVariables
 import RuleAndSystem
 
-max_zoom :: GLdouble
-max_zoom = 1.6e-5
 
 init_win_size :: Size
 init_win_size = Size 1000 500
@@ -117,44 +116,6 @@ main = do
     -- Main loop
     mainLoop
 
-zoom_ok :: GLdouble -> GLdouble -> Bool
-zoom_ok x x' = abs (x' - x) >=  visual_width * max_zoom
-
-limit_pos :: (GLdouble, GLdouble, GLdouble, GLdouble)
-    -> (GLdouble, GLdouble, GLdouble, GLdouble)
-limit_pos (x, y, x', y')
-    | zoom_ok x x' = (x, y, x', y')
-    | otherwise    = (x, y, x_new', y_new')
-    where x_new' = x + visual_width * (if x' < x then -max_zoom else max_zoom)
-          y_new' = y + visual_height * (if y' < y then -max_zoom else max_zoom)
-
-calc_pos :: (Position, Position) -> ((GLdouble, GLdouble), (GLdouble, GLdouble))
-       -> Size -> (GLdouble, GLdouble, GLdouble, GLdouble)
-calc_pos (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) =
-    limit_pos (x_new, y_new, x_new', y_new')
-    where x_new   = v + fromIntegral x * x_scale  :: GLdouble
-          y_new   = w + fromIntegral y * y_scale  :: GLdouble
-          x_new'  = v + fromIntegral x' * x_scale :: GLdouble
-          y_new'  = w + fromIntegral y' * y_scale :: GLdouble
-          x_scale = (v' - v) / fromIntegral p
-          y_scale = (w' - w) / fromIntegral q
-
-drawMouseSquare :: Bool -> (Position, Position)
-       -> ((GLdouble, GLdouble), (GLdouble, GLdouble)) -> Size -> Background
-          -> IO ()
-drawMouseSquare True poses vis size back = do
-    unsafePreservingMatrix $ do
-        if back == Black
-        then color $ Color4 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 0.0 1.0
-        else color $ Color4 0.0 (255.0 * 0.45 :: GLdouble) (255.0 * 0.95) 1.0
-        let (x_new, y_new, x_new', y_new') = calc_pos poses vis size
-        renderPrimitive LineLoop $ do
-            vertex $ Vertex3 x_new  y_new  0.5
-            vertex $ Vertex3 x_new  y_new' 0.5
-            vertex $ Vertex3 x_new' y_new' 0.5
-            vertex $ Vertex3 x_new' y_new  0.5
-drawMouseSquare False _ _ _ _ = do
-    return ()
 
 reshape :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> ReshapeCallback
@@ -192,7 +153,7 @@ keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
     let poses = (init_pos env, cur_pos env)
         vis   = (vis_lu env, vis_rd env)
-    let (x_new, y_new, x_new', y_new') = calc_pos poses vis (win_size env)
+    let (x_new, y_new, x_new', y_new') = zoom_position poses vis (win_size env)
         x  = min x_new x_new'
         y  = min y_new y_new'
         x' = max x_new x_new'

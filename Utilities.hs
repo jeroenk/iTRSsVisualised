@@ -46,7 +46,9 @@ prefix_path s = do
             data_dir <- getDataDir
             let s' = data_dir ++ pathSeparator:s
             file_ok' <- doesFileExist s'
-            if file_ok' then return s' else error $ "Cannot find " ++ s
+            case file_ok' of
+                True  -> return s'
+                False -> error ("Cannot find " ++ s)
 
 -- Load a texture from an image file.
 loadImageTexture :: FilePath -> IO TextureObject
