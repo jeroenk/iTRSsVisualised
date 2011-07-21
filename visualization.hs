@@ -101,10 +101,13 @@ update_view :: RewriteSystem s v r
     => EnvironmentRef s v r -> IO ()
 update_view environment = do
     env <- get environment
-    when (isJust $ red_list env) $ deleteObjectNames [fromJust (red_list env)]
-    environment $= env {red_list = Nothing}
     let (l, u) = vis_lu env
         (r, d) = vis_rd env
+    -- Delete reduction rendering that might have been for different zoom.
+    when (isJust $ red_list env) $ do
+        deleteObjectNames [fromJust (red_list env)]
+        environment $= env {red_list = Nothing}
+    -- Update projection
     matrixMode $= Projection
     loadIdentity
     ortho l r d u (-1.0) 1.0
@@ -124,77 +127,109 @@ reshape environment (Size w h) = do
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
+-- Factor used when moving with cursor keys
+move_fac :: GLdouble
+move_fac = 0.05
 
+-- Factor used when zooming with + and - keys
+zoom_fac :: GLdouble
+zoom_fac = 0.05
+
+-- Keyboard and mouse callback
 keyboardMouse :: RewriteSystem s v r
     => EnvironmentRef s v r -> KeyboardMouseCallback
 keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
     env <- get environment
-    environment $= env {mouse_use = True, init_pos = pos, cur_pos = pos}
-    update_view environment -- Just "postRedisplay" has performance issues
+    environment $= env {
+        mouse_use = True,
+        init_pos  = pos,
+        cur_pos   = pos
+        }
+    update_view environment -- Using only "postRedisplay" has performance issues
 keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
-    let poses = (init_pos env, cur_pos env)
-        vis   = (vis_lu env, vis_rd env)
-    let (x_new, y_new, x_new', y_new') = zoom_position poses vis (win_size env)
-        x  = min x_new x_new'
-        y  = min y_new y_new'
-        x' = max x_new x_new'
-        y' = max y_new y_new'
-    environment $= env {mouse_use = False, vis_lu = (x, y), vis_rd = (x', y')}
+    let phys_pos = (init_pos env, cur_pos env)
+        vis      = (vis_lu env, vis_rd env)
+        (x, y, x', y') = zoom_position phys_pos vis (win_size env)
+    environment $= env {
+        mouse_use = False,
+        vis_lu = (min x x', min y y'),
+        vis_rd = (max x x', max y y')
+        }
     update_view environment
 keyboardMouse environment (SpecialKey KeyRight) Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_lu env
         (x', y') = vis_rd env
-        move     = (x' - x) * 0.05
-    environment $= env {vis_lu = (x + move, y), vis_rd = (x' + move, y')}
+        move     = (x' - x) * move_fac
+    environment $= env {
+        vis_lu = (x + move, y),
+        vis_rd = (x' + move, y')
+        }
     update_view environment
 keyboardMouse environment (SpecialKey KeyLeft) Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_lu env
         (x', y') = vis_rd env
-        move     = (x' - x) * 0.05
-    environment $= env {vis_lu = (x - move, y), vis_rd = (x' - move, y')}
+        move     = (x' - x) * move_fac
+    environment $= env {
+        vis_lu = (x - move, y),
+        vis_rd = (x' - move, y')
+        }
     update_view environment
 keyboardMouse environment (SpecialKey KeyUp) Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_lu env
         (x', y') = vis_rd env
-        move     = (y' - y) * 0.05
-    environment $= env {vis_lu = (x, y - move), vis_rd = (x', y' - move)}
+        move     = (y' - y) * move_fac
+    environment $= env {
+        vis_lu = (x, y - move),
+        vis_rd = (x', y' - move)
+        }
     update_view environment
 keyboardMouse environment (SpecialKey KeyDown) Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_lu env
         (x', y') = vis_rd env
-        move     = (y' - y) * 0.05
-    environment $= env {vis_lu = (x, y + move), vis_rd = (x', y' + move)}
+        move     = (y' - y) * move_fac
+    environment $= env {
+        vis_lu = (x, y + move),
+        vis_rd = (x', y' + move)
+        }
     update_view environment
 keyboardMouse environment (Char '+') Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_lu env
         (x', y') = vis_rd env
-        x_diff = if zoom_ok x x' then (x' - x) * 0.05 else 0.0
-        y_diff = if zoom_ok x x' then (y' - y) * 0.05 else 0.0
-    environment $= env {vis_lu = (x  + x_diff, y  + y_diff),
-                        vis_rd = (x' - x_diff, y' - y_diff)}
+        x_diff = if zoom_ok x x' then (x' - x) * zoom_fac else 0.0
+        y_diff = if zoom_ok x x' then (y' - y) * zoom_fac else 0.0
+    environment $= env {
+        vis_lu = (x  + x_diff, y  + y_diff),
+        vis_rd = (x' - x_diff, y' - y_diff)
+        }
     update_view environment
 keyboardMouse environment (Char '-') Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_lu env
         (x', y') = vis_rd env
-        x_diff = (x' - x) * 0.05
-        y_diff = (y' - y) * 0.05
-    environment $= env {vis_lu = (x  - x_diff, y  - y_diff),
-                        vis_rd = (x' + x_diff, y' + y_diff)}
+        x_diff = (x' - x) * zoom_fac
+        y_diff = (y' - y) * zoom_fac
+    environment $= env {
+        vis_lu = (x  - x_diff, y  - y_diff),
+        vis_rd = (x' + x_diff, y' + y_diff)
+        }
     update_view environment
 keyboardMouse environment (Char 'r') Down _ _ = do
     env <- get environment
-    environment $= env {vis_lu = (0.0, 0.0), vis_rd = (visual_width, visual_height)}
+    environment $= env {
+        vis_lu = (0.0, 0.0),
+        vis_rd = (visual_width, visual_height)
+        }
     update_view environment
 keyboardMouse _ _ _ _ _ = do
     return ()
 
+-- callback for mouse movement
 motion :: RewriteSystem s v r
     => EnvironmentRef s v r -> MotionCallback
 motion environment (Position x y) = do
@@ -218,35 +253,7 @@ motion environment (Position x y) = do
               x' w = max 0 (min x w)
               y' h = max 0 (min y h)
 
-displayMouseSquare :: RewriteSystem s v r
-    => EnvironmentRef s v r -> IO ()
-displayMouseSquare environment = do
-    env <- get environment
-    let poses = (init_pos env, cur_pos env)
-        vis   = (vis_lu env, vis_rd env)
-    drawMouseSquare (mouse_use env) poses vis (win_size env) (background env)
-
-displayReduction :: (Show s, Show v, RewriteSystem s v r)
-    => EnvironmentRef s v r -> IO ()
-displayReduction environment = do
-    env <- get environment
-    when (isNothing $ red_list env) $ do displayReduction' environment
-    env' <- get environment -- Updated by displayReduction'
-    callList $ fromJust (red_list env')
-
-displayReduction' :: (Show s, Show v, RewriteSystem s v r)
-    => EnvironmentRef s v r -> IO ()
-displayReduction' environment = do
-    list <- defineNewList Compile $ do
-        drawReduction environment
-    env <- get environment
-    environment $= env {red_list = Just list}
-
-displayError :: E.ErrorCall -> IO ()
-displayError err = do
-    -- In case of an error we exit, as we might end up in an infinite loop
-    error $ show err
-
+-- Callbacks for changing the background color.
 blackBackground :: RewriteSystem s v r
     => EnvironmentRef s v r -> MenuCallback
 blackBackground environment = do
@@ -262,6 +269,35 @@ whiteBackground environment = do
     env <- get environment
     environment $= env {background = White}
     update_view environment
+
+-- Callback for displaying (and a number of helper functions).
+displayReduction :: (Show s, Show v, RewriteSystem s v r)
+    => EnvironmentRef s v r -> IO ()
+displayReduction environment = do
+    env <- get environment
+    when (isNothing $ red_list env) $ do displayReduction' environment
+    env' <- get environment -- Environment updated by displayReduction'
+    callList $ fromJust (red_list env')
+
+displayReduction' :: (Show s, Show v, RewriteSystem s v r)
+    => EnvironmentRef s v r -> IO ()
+displayReduction' environment = do
+    list <- defineNewList Compile $ drawReduction environment
+    env <- get environment
+    environment $= env {red_list = Just list}
+
+displayMouseSquare :: RewriteSystem s v r
+    => EnvironmentRef s v r -> IO ()
+displayMouseSquare environment = do
+    env <- get environment
+    let phys_pos = (init_pos env, cur_pos env)
+        vis      = (vis_lu env, vis_rd env)
+    drawMouseSquare (mouse_use env) phys_pos vis (win_size env) (background env)
+
+displayError :: E.ErrorCall -> IO ()
+displayError err = do
+    -- In case of an error we exit, as we might end up in an infinite loop
+    error $ show err
 
 display :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> DisplayCallback
