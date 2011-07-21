@@ -64,16 +64,16 @@ zoom_position phys_pos vis size = zoom_position' phys_pos vis size True
 
 zoom_position' :: (Position, Position) -> (VisiblePos, VisiblePos)
      -> Size -> Bool -> (GLdouble, GLdouble, GLdouble, GLdouble)
-zoom_position' (Position x y, Position x' y') ((v, w), (v', w')) (Size p q) z
-    | x == x' && y == y && z = (v, w, v', w')
+zoom_position' (Position x y, Position x' y') ((l, u), (r, d)) (Size p q) z
+    | x == x' && y == y && z = (l, u, d, r)
     | x == x' && y == y = (x_new, y_new, x_new', y_new')
     | otherwise = limit_position x_new y_new x_new' y_new'
-    where x_new   = v + fromIntegral x * x_scale  :: GLdouble
-          y_new   = w + fromIntegral y * y_scale  :: GLdouble
-          x_new'  = v + fromIntegral x' * x_scale :: GLdouble
-          y_new'  = w + fromIntegral y' * y_scale :: GLdouble
-          x_scale = (v' - v) / fromIntegral p
-          y_scale = (w' - w) / fromIntegral q
+    where x_new   = l + fromIntegral x  * x_scale  :: GLdouble
+          y_new   = u + fromIntegral y  * y_scale  :: GLdouble
+          x_new'  = l + fromIntegral x' * x_scale :: GLdouble
+          y_new'  = u + fromIntegral y' * y_scale :: GLdouble
+          x_scale = (r - l) / fromIntegral p
+          y_scale = (d - u) / fromIntegral q
 
 -- drawMouseSquare
 --

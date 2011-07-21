@@ -283,15 +283,15 @@ drawSubterms (t:ts) p rel_pos lu rd max_d max_ns environment = do
 drawTerm :: (Show s, Show v, RewriteSystem s v r)
     => Term s v -> Maybe Position -> PositionData -> VisiblePos
        -> VisiblePos -> Int -> Int -> EnvironmentRef s v r -> IO ()
-drawTerm t p t_pos lu@(l_min, u_max) rd@(r_max, d_min) max_d max_ns environment
+drawTerm t p t_pos lu@(l, u) rd@(r, d) max_d max_ns environment
     | max_d < 0 = do
         return ()
-    | l_min - 2.0 * n_size > right t_pos
-      || r_max + 2.0 * n_size < left t_pos
-      || d_min + 2.0 * n_size < height t_pos = do
+    | l - 2.0 * n_size > right t_pos
+      || r + 2.0 * n_size < left t_pos
+      || d + 2.0 * n_size < height t_pos = do
         env <- get environment
         drawEdge (up t_pos) n_pos (background env)
-    | u_max - (2.0 * n_size) > height t_pos = do
+    | u - (2.0 * n_size) > height t_pos = do
         if up t_pos == Nothing
             then drawSubterms ts p rel_pos lu rd max_d max_ns environment
             else drawSubterms ts p rel_pos lu rd (max_d - 1) max_ns environment
@@ -340,8 +340,8 @@ drawTerms _ _ _ _ _ 0 _ _ _ = do
 drawTerms  (_:_) [] _ _ _ _ _ _ _ = do
     error "Number of terms and positions differ"
 -- Normal case where terms should be drawn
-drawTerms ts ps slice lu@(_, u_max) rd max_ts max_d max_ns environment
-    | slice_height slice + top_margin < u_max = do
+drawTerms ts ps slice lu@(_, u) rd max_ts max_d max_ns environment
+    | slice_height slice + top_margin < u = do
         return ()
     | otherwise = do
         env <- get environment
@@ -354,8 +354,8 @@ drawTerms ts ps slice lu@(_, u_max) rd max_ts max_d max_ns environment
 drawTerms' :: (Show s, Show v, RewriteSystem s v r)
     => [Term s v] -> [Position] -> SlicePosData -> VisiblePos -> VisiblePos
        -> Int -> Int -> Int -> EnvironmentRef s v r -> IO ()
-drawTerms' ts ps slice lu@(l_min, _) rd max_ts max_d max_ns environment
-    | slice_right < l_min = do -- Current term falls outside the window
+drawTerms' ts ps slice lu@(l, _) rd max_ts max_d max_ns environment
+    | slice_right < l = do -- Current term falls outside the window
         drawTerms ts' ps' slice' lu rd max_ts max_d max_ns environment
     | otherwise = do
         drawTerm t (Just p) t_pos lu rd max_d max_ns environment

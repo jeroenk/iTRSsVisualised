@@ -34,13 +34,15 @@ import Utilities
 import SignatureAndVariables
 import RuleAndSystem
 
-
+-- Initial window size
 init_win_size :: Size
 init_win_size = Size 1000 500
 
+-- Texture for the nodes in term trees
 node_file :: FilePath
 node_file = "node.png"
 
+-- Font for the node labels
 font_file :: FilePath
 font_file = "fonts" ++ pathSeparator:"FreeSans.ttf"
 
@@ -77,7 +79,8 @@ main = do
     lineSmooth      $= Enabled
     hint LineSmooth $= Nicest
 
-    environment <- init_environment red node_file font_file font_scale init_win_size visual_width visual_height
+    environment <- init_environment red node_file font_file font_scale
+                                        init_win_size visual_width visual_height
 
     -- Initialize callbacks
     displayCallback       $= display environment
@@ -85,7 +88,7 @@ main = do
     keyboardMouseCallback $= Just (keyboardMouse environment)
     motionCallback        $= Just (motion environment)
 
-    -- Color menu
+    -- Menu for choosing colors
     let menu = Menu [MenuEntry "Black Background" (blackBackground environment),
                      MenuEntry "White Background" (whiteBackground environment)]
     attachMenu RightButton menu
@@ -93,7 +96,23 @@ main = do
     -- Main loop
     mainLoop
 
+-- Helper function for screen update after zooming and color change.
+update_view :: RewriteSystem s v r
+    => EnvironmentRef s v r -> IO ()
+update_view environment = do
+    env <- get environment
+    when (isJust $ red_list env) $ deleteObjectNames [fromJust (red_list env)]
+    environment $= env {red_list = Nothing}
+    let (l, u) = vis_lu env
+        (r, d) = vis_rd env
+    matrixMode $= Projection
+    loadIdentity
+    ortho l r d u (-1.0) 1.0
+    matrixMode $= Modelview 0
+    loadIdentity
+    postRedisplay Nothing
 
+-- Reshape window callback
 reshape :: (Signature s, Variables v, RewriteSystem s v r)
     => (EnvironmentRef s v r) -> ReshapeCallback
 reshape environment (Size w h) = do
@@ -105,20 +124,6 @@ reshape environment (Size w h) = do
         where w' = if (h * 2) > w then w else (h * 2)
               h' = if (h * 2) > w then (w `div` 2) else h
 
-update_view :: RewriteSystem s v r
-    => EnvironmentRef s v r -> IO ()
-update_view environment = do
-    env <- get environment
-    when (isJust $ red_list env) $ deleteObjectNames [fromJust (red_list env)]
-    environment $= env {red_list = Nothing}
-    let ul = vis_lu env
-        dr = vis_rd env
-    matrixMode $= Projection
-    loadIdentity
-    ortho (fst ul) (fst dr) (snd dr) (snd ul) (-1.0) 1.0
-    matrixMode $= Modelview 0
-    loadIdentity
-    postRedisplay Nothing
 
 keyboardMouse :: RewriteSystem s v r
     => EnvironmentRef s v r -> KeyboardMouseCallback
