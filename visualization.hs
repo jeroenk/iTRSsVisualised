@@ -1,4 +1,3 @@
-{-# LANGUAGE DoAndIfThenElse #-}
 {-
 Copyright (C) 2011 Jeroen Ketema
 
@@ -22,13 +21,10 @@ module Main (
 
 import qualified Control.Exception as E
 import Control.Monad
-import Data.IORef
 import Data.Maybe
-import Graphics.Rendering.FTGL
 import Graphics.Rendering.OpenGL
 import Graphics.UI.GLUT
 import System.FilePath
-import System.Random
 
 import DrawReduction
 import DrawMouseSquare
@@ -41,6 +37,12 @@ import RuleAndSystem
 
 init_win_size :: Size
 init_win_size = Size 1000 500
+
+node_file :: FilePath
+node_file = "node.png"
+
+font_file :: FilePath
+font_file = "fonts" ++ pathSeparator:"FreeSans.ttf"
 
 main :: IO ()
 main = do
@@ -75,32 +77,7 @@ main = do
     lineSmooth      $= Enabled
     hint LineSmooth $= Nicest
 
-    -- Initialize texture
-    let node_file = "node.png"
-    tex <- loadImageTexture node_file
-
-    -- Initialize font
-    let font_file = "fonts" ++ pathSeparator:"FreeSans.ttf"
-    font <- loadFontTexture font_file
-    _ <- setFontFaceSize font (24 * font_scale) 72
-
-    -- Initialize environment
-    gen <- newStdGen
-    environment <- newIORef $ Env {
-        env_red    = red,
-        red_list   = Nothing,
-        win_size   = init_win_size,
-        vis_lu     = (0.0, 0.0),
-        vis_rd     = (visual_width, visual_height),
-        background = Black,
-        colors     = [],
-        generator  = gen,
-        mouse_use  = False,
-        init_pos   = Position 0 0,
-        cur_pos    = Position 0 0,
-        node_tex   = tex,
-        sym_font   = font
-        }
+    environment <- init_environment red node_file font_file font_scale init_win_size visual_width visual_height
 
     -- Initialize callbacks
     displayCallback       $= display environment

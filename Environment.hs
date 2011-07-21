@@ -24,7 +24,8 @@ module Environment (
     Environment(Env, env_red, red_list, win_size, vis_lu, vis_rd, background,
                 colors, generator, mouse_use, init_pos, cur_pos, node_tex,
                 sym_font),
-    EnvironmentRef
+    EnvironmentRef,
+    init_environment
 ) where
 
 import SignatureAndVariables
@@ -35,6 +36,8 @@ import Data.IORef
 import Graphics.Rendering.OpenGL
 import Graphics.Rendering.FTGL
 import System.Random
+
+import Utilities
 
 -- Data type for visible positions
 type VisiblePos = (GLdouble, GLdouble)
@@ -78,3 +81,35 @@ data RewriteSystem s v r => Environment s v r
       }
 
 type EnvironmentRef s v r = IORef (Environment s v r)
+
+-- Initialize the environment
+init_environment :: RewriteSystem s v r
+    => CReduction s v r -> FilePath -> FilePath -> Int -> Size -> GLdouble
+       -> GLdouble -> IO (IORef (Environment s v r))
+init_environment red n_file f_file f_scale w_size vis_width vis_height = do
+    -- Initialize node texture
+    node <- loadImageTexture n_file
+
+    -- Initialize font
+    font <- loadFontTexture f_file
+    _ <- setFontFaceSize font (24 * f_scale) 72
+
+    -- Initialize random number generator
+    gen <- newStdGen
+
+    -- Initialize environment
+    newIORef $ Env {
+        env_red    = red,
+        red_list   = Nothing,
+        win_size   = w_size,
+        vis_lu     = (0.0, 0.0),
+        vis_rd     = (vis_width, vis_height),
+        background = Black,
+        colors     = [],
+        generator  = gen,
+        mouse_use  = False,
+        init_pos   = Position 0 0,
+        cur_pos    = Position 0 0,
+        node_tex   = node,
+        sym_font   = font
+        }
