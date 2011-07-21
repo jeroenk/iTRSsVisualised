@@ -293,8 +293,8 @@ drawTerm t p t_pos lu@(l, u) rd@(r, d) max_d max_ns environment
         drawEdge (up t_pos) n_pos (background env)
     | u - (2.0 * n_size) > height t_pos = do
         if up t_pos == Nothing
-            then drawSubterms ts p rel_pos lu rd max_d max_ns environment
-            else drawSubterms ts p rel_pos lu rd (max_d - 1) max_ns environment
+            then drawSubterms ts p rel_pos lu rd (max_d - 1) max_ns environment
+            else drawSubterms ts p rel_pos lu rd max_d max_ns environment
     | max_ns <= 0 = do
         env <- get environment
         drawEdge (up t_pos) n_pos (background env)
