@@ -67,7 +67,7 @@ loadFontTexture s = do
 
 -- Load a reduction (possibly compiling it on-the-file). After compilation
 -- and loading, the remainders are cleaned-up.
-loadReduction :: FilePath -> IO (DynamicReduction)
+loadReduction :: FilePath -> IO DynamicReduction
 loadReduction s = do
     let to_string = foldr (\x y -> x ++ "\n" ++ y) ""
     putStrLn ("Compiling " ++ s)
@@ -75,7 +75,7 @@ loadReduction s = do
     case make_stat of
         MakeFailure err -> error $ to_string err
         MakeSuccess _ _ -> putStrLn ("Done compiling " ++ s)
-    load_stat <- load (s ++ ".o") [".."] [] "c_reduction"
+    load_stat <- load_ (s ++ ".o") [".."] "c_reduction"
     reduction <- case load_stat of
         LoadFailure err -> error $ to_string err
         LoadSuccess _ v -> return v

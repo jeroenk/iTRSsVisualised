@@ -33,7 +33,6 @@ import Reduction
 
 import Data.Array
 import Data.List
-import Data.Maybe
 import Graphics.Rendering.FTGL
 import Graphics.Rendering.OpenGL hiding (Position)
 import System.Random
@@ -233,7 +232,7 @@ drawNode f redex_p size pos environment = do
         col  = case background env of
             Black -> col_b
             White -> col_w
-        col' = if isJust redex_p && fromJust redex_p == [] then red else col
+        col' = if redex_p == Just [] then red else col
     unsafePreservingMatrix $ do
         color col'
         translate pos
@@ -245,7 +244,7 @@ drawNode f redex_p size pos environment = do
 
 -- Subterm drawing.
 get_subterms :: (Signature s, Variables v)
-    => (Term s v) -> [Term s v]
+    => Term s v -> [Term s v]
 get_subterms (Function _ ts) = elems ts
 get_subterms (Variable _)    = []
 
@@ -385,7 +384,7 @@ drawTerms' ts ps slice lu@(l, _) rd max_ts max_d max_ns environment
 
 -- Helper functions to extract the needed data from reductions.
 get_modulus :: RewriteSystem s v r
-    => CReduction s v r -> (Integer -> Integer)
+    => CReduction s v r -> Integer -> Integer
 get_modulus (CRCons _ phi) = phi'
     where phi' d = ord_to_int (phi ord_zero d)
 
@@ -411,8 +410,8 @@ drawReduction environment = do
         (ts, ps) = get_terms_and_positions (env_red env)
         slice    = SlicePos {
             slice_left   = 0.0,
-            slice_width  = (visual_width / 2.0), -- Use half for first term
-            slice_height = (visual_height - top_margin),
+            slice_width  = visual_width / 2.0, -- Use half for first term
+            slice_height = visual_height - top_margin,
             slice_arrow  = 40.0 -- Arbitrary size for first arrow
             }
     drawTerms ts ps slice lu rd max_terms max_depth max_nodes environment

@@ -84,7 +84,7 @@ reduction :: OmegaReduction DynamicSigma DynamicVar DynamicSystem
 reduction = RCons (construct_sequence terms) (construct_sequence steps)
     where terms = rewrite_steps h_f_f_omega steps
           steps = zip ps rs
-          ps = [2] : (map (\p -> p ++ [1, 1]) ps)
+          ps = [2] : map (\p -> p ++ [1, 1]) ps
           rs = repeat rule_f_x_to_g_x
 
 c_reduction :: DynamicReduction

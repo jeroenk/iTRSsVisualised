@@ -98,7 +98,7 @@ init_environment red n_file f_file f_scale w_size vis_width vis_height = do
     gen <- newStdGen
 
     -- Initialize environment
-    newIORef $ Env {
+    newIORef Env {
         env_red    = red,
         red_list   = Nothing,
         win_size   = w_size,

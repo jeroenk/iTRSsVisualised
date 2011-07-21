@@ -117,15 +117,15 @@ update_view environment = do
 
 -- Reshape window callback
 reshape :: (Signature s, Variables v, RewriteSystem s v r)
-    => (EnvironmentRef s v r) -> ReshapeCallback
+    => EnvironmentRef s v r -> ReshapeCallback
 reshape environment (Size w h) = do
     env <- get environment
     environment $= env {win_size = Size w' h'}
     viewport    $= (Position 0 0, Size w' h')
     windowSize  $= Size w' h'
     postRedisplay Nothing
-        where w' = if (h * 2) > w then w else (h * 2)
-              h' = if (h * 2) > w then (w `div` 2) else h
+        where w' = if h * 2 > w then w else h * 2
+              h' = if h * 2 > w then w `div` 2 else h
 
 -- Factor used when moving with cursor keys
 move_fac :: GLdouble
@@ -246,8 +246,8 @@ motion environment (Position x y) = do
                         y_new
                             | y_cur >= y_int = y_int + h_new
                             | otherwise      = y_int - h_new
-                        w_new = if (h' * 2) > w' then w' else (h' * 2)
-                        h_new = if (h' * 2) > w' then (w' `div` 2) else h'
+                        w_new = if h' * 2 > w' then w' else h' * 2
+                        h_new = if h' * 2 > w' then w' `div` 2 else h'
                         w' = abs (x_cur - x_int)
                         h' = abs (y_cur - y_int)
               x' w = max 0 (min x w)
@@ -275,7 +275,7 @@ displayReduction :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> IO ()
 displayReduction environment = do
     env <- get environment
-    when (isNothing $ red_list env) $ do displayReduction' environment
+    when (isNothing $ red_list env) $ displayReduction' environment
     env' <- get environment -- Environment updated by displayReduction'
     callList $ fromJust (red_list env')
 
@@ -294,10 +294,9 @@ displayMouseSquare environment = do
         vis      = (vis_lu env, vis_rd env)
     drawMouseSquare (mouse_use env) phys_pos vis (win_size env) (background env)
 
+-- In case of an error we exit, as we might end up in an infinite loop
 displayError :: E.ErrorCall -> IO ()
-displayError err = do
-    -- In case of an error we exit, as we might end up in an infinite loop
-    error $ show err
+displayError err = error $ show err
 
 display :: (Show s, Show v, RewriteSystem s v r)
     => EnvironmentRef s v r -> DisplayCallback

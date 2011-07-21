@@ -40,7 +40,7 @@ reduction' :: OmegaReduction Sigma Var System_a_f_x
 reduction' = RCons (construct_sequence terms) (construct_sequence steps)
     where terms = rewrite_steps h_f_f_omega steps
           steps = zip ps rs
-          ps = [2] : (map (\p -> p ++ [1, 1]) ps)
+          ps = [2] : map (\p -> p ++ [1, 1]) ps
           rs = repeat rule_f_x_to_g_x
 
 c_reduction' :: CReduction Sigma Var System_a_f_x
