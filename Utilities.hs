@@ -32,7 +32,6 @@ import Graphics.Rendering.OpenGL
 import System.Directory
 import System.FilePath
 import System.Plugins
-import System.Process
 
 import Paths_Visualization
 
@@ -71,7 +70,7 @@ loadReduction :: FilePath -> IO DynamicReduction
 loadReduction s = do
     let to_string = foldr (\x y -> x ++ "\n" ++ y) ""
     putStrLn ("Compiling " ++ s)
-    make_stat <- makeAll (s ++ ".hs") ["-i.."]
+    make_stat <- make (s ++ ".hs") ["-i.."]
     case make_stat of
         MakeFailure err -> error $ to_string err
         MakeSuccess _ _ -> putStrLn ("Done compiling " ++ s)
@@ -79,5 +78,5 @@ loadReduction s = do
     reduction <- case load_stat of
         LoadFailure err -> error $ to_string err
         LoadSuccess _ v -> return v
-    _ <- runCommand "rm -f *.o *.hi"
+    makeClean (s ++ ".hs")
     return reduction
