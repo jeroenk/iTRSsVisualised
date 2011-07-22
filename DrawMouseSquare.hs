@@ -65,7 +65,7 @@ zoom_position phys_pos vis size = zoom_position' phys_pos vis size True
 zoom_position' :: (Position, Position) -> (VisiblePos, VisiblePos)
      -> Size -> Bool -> (GLdouble, GLdouble, GLdouble, GLdouble)
 zoom_position' (Position x y, Position x' y') ((l, u), (r, d)) (Size p q) z
-    | x == x' && y == y && z = (l, u, d, r)
+    | x == x' && y == y && z = (l, u, r, d)
     | x == x' && y == y = (x_new, y_new, x_new', y_new')
     | otherwise = limit_position x_new y_new x_new' y_new'
     where x_new   = l + fromIntegral x  * x_scale  :: GLdouble
