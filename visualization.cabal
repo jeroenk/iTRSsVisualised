@@ -7,7 +7,7 @@ Synopsis:      Primitive visualization of infinite reductions
 Category:      Tools
 Build-Type:    Simple
 Stability:     Alpha
-Tested-With:   GHC >= 6.12.3
+Tested-With:   GHC >= 6.12.1
 Data-Files:
         node.png,
         fonts/*.ttf
@@ -15,17 +15,16 @@ Data-Files:
 
 Executable visualization
     Build-Depends:
-        array >= 0.3,
+        array,
         base ==4.*,
         bitmap-opengl ==0.0.0,
-        directory >= 1.1,
-        filepath >= 1.2,
+        directory,
+        filepath,
         FTGL ==1.333,
         GLUT >= 2.1,
         haskell98,
         OpenGL >= 2.2,
         plugins >= 1.5,
-        process >= 1.0,
         random,
         stb-image ==0.2
     Main-Is: visualization.hs
