@@ -148,15 +148,16 @@ keyboardMouse environment (MouseButton LeftButton) Down _ pos = do
     update_view environment -- Using only "postRedisplay" has performance issues
 keyboardMouse environment (MouseButton LeftButton) Up _ _ = do
     env <- get environment
-    let phys_pos = (init_pos env, cur_pos env)
-        vis      = (vis_lu env, vis_rd env)
-        (x, y, x', y') = zoom_position phys_pos vis (win_size env)
-    environment $= env {
-        mouse_use = False,
-        vis_lu = (min x x', min y y'),
-        vis_rd = (max x x', max y y')
-        }
-    update_view environment
+    when (mouse_use env) $ do -- Linux registers left up when in context menu
+        let phys_pos = (init_pos env, cur_pos env)
+            vis      = (vis_lu env, vis_rd env)
+            (x, y, x', y') = zoom_position phys_pos vis (win_size env)
+        environment $= env {
+            mouse_use = False,
+            vis_lu = (min x x', min y y'),
+            vis_rd = (max x x', max y y')
+            }
+        update_view environment
 keyboardMouse environment (SpecialKey KeyRight) Down _ _ = do
     env <- get environment
     let (x,  y)  = vis_lu env
