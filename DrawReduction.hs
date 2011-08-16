@@ -276,7 +276,7 @@ drawSubterms (t:ts) p rel_pos lu rd max_d max_ns environment = do
 -- Term drawing.
 --
 -- We do not draw the root node of a term in case it falls outside a certain
--- small distance from the visible are. We do no use the exact visible area
+-- small distance from the visible are. We do not use the exact visible area
 -- to ensure nodes and node labels are actually drawn in case they are
 -- they are partially visible.
 drawTerm :: (Show s, Show v, RewriteSystem s v r)
