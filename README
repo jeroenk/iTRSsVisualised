@@ -50,14 +50,12 @@ The program can be compiled with:
   ./Setup.lhs build
 
 Depending on the installation location of the dependencies --user may have to
-be pass to configure.
+be passed to configure.
 
-Optionally the program can be installed with:
+After compilation a copy of the program can also be found in the source
+directory. Optionally, the program can be installed with:
 
   ./Setup.lhs install
-
-However, after compilation a copy of the program can also be found in the
-source directory.
 
 Dependencies
 ------------
