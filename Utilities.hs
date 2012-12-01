@@ -1,5 +1,5 @@
 {-
-Copyright (C) 2011 Jeroen Ketema
+Copyright (C) 2011, 2012 Jeroen Ketema
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -25,6 +25,7 @@ module Utilities (
 
 import DynamicReduction
 
+import Prelude
 import Codec.Image.STB
 import Data.Bitmap.OpenGL
 import Graphics.Rendering.FTGL
@@ -39,15 +40,15 @@ import Paths_Visualization
 prefixPath :: FilePath -> IO FilePath
 prefixPath s = do
     file_ok <- doesFileExist s
-    case file_ok of
-        True  -> return s
-        False -> do
+    if file_ok
+        then return s
+        else do
             data_dir <- getDataDir
-            let s' = data_dir ++ pathSeparator:s
+            let s' = data_dir ++ pathSeparator : s
             file_ok' <- doesFileExist s'
-            case file_ok' of
-                True  -> return s'
-                False -> error ("Cannot find " ++ s)
+            if file_ok'
+                then return s'
+                else error ("Cannot find " ++ s)
 
 -- Load a texture from an image file.
 loadImageTexture :: FilePath -> IO TextureObject
@@ -75,15 +76,15 @@ removeObjects = do
 -- and loading, the remainders are cleaned-up.
 loadReduction :: FilePath -> IO DynamicReduction
 loadReduction s = do
-    let to_string = foldr (\x y -> x ++ "\n" ++ y) ""
+    let toString = foldr (\x y -> x ++ "\n" ++ y) ""
     putStrLn ("Compiling " ++ s)
     make_stat <- makeAll (s ++ ".hs") ["-i.."]
     case make_stat of
-        MakeFailure err -> error $ to_string err
+        MakeFailure err -> error $ toString err
         MakeSuccess _ _ -> putStrLn ("Done compiling " ++ s)
-    load_stat <- load_ (s ++ ".o") [".", ".."] "c_reduction"
+    load_stat <- load_ (s ++ ".o") [".", ".."] "cReduction"
     reduction <- case load_stat of
-        LoadFailure err -> error $ to_string err
+        LoadFailure err -> error $ toString err
         LoadSuccess _ v -> return v
     removeObjects
     return reduction

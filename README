@@ -1,13 +1,11 @@
 Introduction
 ------------
 
-The code in this directory provides a primitive program for the
-visualization of infinite reductions of length at most omega and is
-developed by Jeroen Ketema.
+The code in this directory provides a primitive program for visualization of
+infinite reductions of length at most omega and is developed by Jeroen Ketema.
 
-The Haskell code has been tested with versions 6.12.3 and 7.0.3 of the
-Glasgow Haskell Compiler (GHC). To obtain GHC, it is best to install the
-Haskell Platform:
+The Haskell code has been tested with version 7.4.1 of the Glasgow Haskell
+Compiler (GHC). To obtain GHC, it is best to install the Haskell Platform:
 
   http://hackage.haskell.org/platform/
 
@@ -27,7 +25,7 @@ symbol of a node. Moreover, the root node of the contracted redex is always
 colored red.
 
 New reductions can be defined by implementing a module that exports a function
-"c_reduction" of type "DynamicReduction". Note that this currently requires
+"cReduction" of type "DynamicReduction". Note that this currently requires
 access to the source code (no package is installed for DynamicReduction).
 
 The program accepts the following keyboard and mouse inputs:
@@ -63,14 +61,18 @@ Dependencies
 The program has a number dependencies (where the version numbers are the
 versions tested with):
 
-* plugins 1.5.1.4
-* bitmap-opengl 0.0.0
-* stb-image 0.2
+* plugins 1.5.3.0
+* bitmap 0.0.2
+* stb-image 0.2.1
 * FTGL 1.333
 
 All dependencies can be obtained through Hackage:
 
   http://hackage.haskell.org/
+
+In addition, a working copy of bitmap-opengl must be present, which is
+currently not available through Hackage. A working copy can be created
+by downloading version 0.0.0 and updating the first import to Data.Bitmap.
 
 Possible Future Extensions
 --------------------------

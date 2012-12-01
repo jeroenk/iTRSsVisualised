@@ -1,5 +1,5 @@
 {-
-Copyright (C) 2011 Jeroen Ketema
+Copyright (C) 2011, 2012 Jeroen Ketema
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -25,8 +25,8 @@ module DynamicReduction (
     DynamicVar(DynamicVar),
     DynamicSystem,
     DynamicReduction,
-    dynamic_system,
-    make_dynamic
+    dynamicSystem,
+    makeDynamic
 ) where
 
 import SignatureAndVariables
@@ -35,6 +35,8 @@ import RuleAndSystem
 import SystemOfNotation
 import Reduction
 import Omega
+
+import Prelude
 
 -- A "dynamic" signature: the arity is encoded in the function symbol, where
 -- the actual function symbol is represented by a string.
@@ -65,51 +67,51 @@ instance Variables DynamicVar
 -- Remark that not knowing the rules still makes sense in the context of the
 -- confluence and compression algorithms, as these use the rules embedded in
 -- the reductions they are applied to.
-type DynamicSystem = BasicSystem DynamicSigma DynamicVar
+type DynamicSystem = System DynamicSigma DynamicVar
 
-dynamic_system :: DynamicSystem
-dynamic_system = BasicSystemCons rs
+dynamicSystem :: DynamicSystem
+dynamicSystem = SystemCons rs
     where rs = error "Rules cannot be queried in dynamic systems"
 
 -- A "dynamic" reduction.
 type DynamicReduction= CReduction DynamicSigma DynamicVar DynamicSystem
 
 -- The following converts arbitrary reductions of length at most omega to
--- "dynamic" reductions. The main function is make_dynamic.
-dynamic_term :: (Show s, Show v, Signature s, Variables v)
+-- "dynamic" reductions. The main function is makeDynamic.
+dynamicTerm :: (Show s, Show v, Signature s, Variables v)
     => Term s v -> Term DynamicSigma DynamicVar
-dynamic_term (Function f xs) = Function f' xs'
+dynamicTerm (Function f xs) = Function f' xs'
     where f'  = DynamicFun (show f) (arity f)
-          xs' = fmap dynamic_term xs
-dynamic_term (Variable x) = Variable x'
+          xs' = fmap dynamicTerm xs
+dynamicTerm (Variable x) = Variable x'
     where x' = DynamicVar (show x)
 
-dynamic_terms :: (Show s, Show v, RewriteSystem s v r)
+dynamicTerms :: (Show s, Show v, RewriteSystem s v r)
     => CReduction s v r -> [Term DynamicSigma DynamicVar]
-dynamic_terms (CRCons (RCons ts _) _) = map dynamic_term (get_from ts ord_zero)
+dynamicTerms (CRCons (RCons ts _) _) = map dynamicTerm (getFrom ts ordZero)
 
-dynamic_step :: (Show s, Show v, Signature s, Variables v)
+dynamicStep :: (Show s, Show v, Signature s, Variables v)
     => Step s v -> Step DynamicSigma DynamicVar
-dynamic_step (ps, Rule l r) = (ps, Rule l' r')
-    where l' = dynamic_term l
-          r' = dynamic_term r
+dynamicStep (ps, Rule l r) = (ps, Rule l' r')
+    where l' = dynamicTerm l
+          r' = dynamicTerm r
 
-dynamic_steps :: (Show s, Show v, RewriteSystem s v r)
+dynamicSteps :: (Show s, Show v, RewriteSystem s v r)
     => CReduction s v r -> [Step DynamicSigma DynamicVar]
-dynamic_steps (CRCons (RCons _ ss) _) = map dynamic_step (get_from ss ord_zero)
+dynamicSteps (CRCons (RCons _ ss) _) = map dynamicStep (getFrom ss ordZero)
 
-dynamic_modulus :: RewriteSystem s v r
+dynamicModulus :: RewriteSystem s v r
     => CReduction s v r -> Modulus Omega
-dynamic_modulus (CRCons _ phi) = construct_modulus phi'
-    where phi' depth = ord_to_int (phi ord_zero depth)
+dynamicModulus (CRCons _ phi) = constructModulus phi'
+    where phi' depth = ord2Int (phi ordZero depth)
 
-make_dynamic :: (Show s, Show v, RewriteSystem s v r)
+makeDynamic :: (Show s, Show v, RewriteSystem s v r)
     => CReduction s v r -> DynamicReduction
-make_dynamic reduction
-    | at_most_omega reduction = CRCons (RCons ts ss) phi
-    | otherwise               = error "Reduction too long"
-        where ts    = construct_sequence terms
-              ss    = construct_sequence steps
-              phi   = dynamic_modulus reduction
-              terms = dynamic_terms reduction
-              steps = dynamic_steps reduction
+makeDynamic reduction
+    | atMostLengthOmega reduction = CRCons (RCons ts ss) phi
+    | otherwise                   = error "Reduction too long"
+        where ts    = constructSequence terms
+              ss    = constructSequence steps
+              phi   = dynamicModulus reduction
+              terms = dynamicTerms reduction
+              steps = dynamicSteps reduction

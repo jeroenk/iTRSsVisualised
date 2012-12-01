@@ -1,5 +1,5 @@
 {-
-Copyright (C) 2011 Jeroen Ketema
+Copyright (C) 2011, 2012 Jeroen Ketema
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -21,17 +21,18 @@ module Environment (
     VisiblePos,
     Background(Black, White),
     SymbolColor,
-    Environment(Env, env_red, red_list, win_size, vis_lu, vis_rd, background,
-                colors, generator, mouse_use, init_pos, cur_pos, node_tex,
-                sym_font),
+    Environment(Env, envRed, redList, winSize, visLU, visRD, background,
+                colors, generator, mouseUse, initPos, curPos, nodeTex,
+                symFont),
     EnvironmentRef,
-    init_environment
+    initEnvironment
 ) where
 
 import SignatureAndVariables
 import RuleAndSystem
 import Reduction
 
+import Prelude
 import Data.IORef
 import Graphics.Rendering.OpenGL
 import Graphics.Rendering.FTGL
@@ -61,32 +62,32 @@ type SymbolColor s v = (Symbol s v, Color4 GLfloat, Color4 GLfloat)
 data RewriteSystem s v r => Environment s v r
     = Env {
         -- Reduction
-        env_red    :: CReduction s v r,  -- Reduction being visualized
-        red_list   :: Maybe DisplayList, -- Rendered version of reduction
+        envRed     :: CReduction s v r,  -- Reduction being visualized
+        redList    :: Maybe DisplayList, -- Rendered version of reduction
         -- Window and display
-        win_size   :: Size,              -- Physical window size
-        vis_lu     :: VisiblePos,        -- (left, up) of visible area
-        vis_rd     :: VisiblePos,        -- (right, down) of visible area
+        winSize    :: Size,              -- Physical window size
+        visLU      :: VisiblePos,        -- (left, up) of visible area
+        visRD      :: VisiblePos,        -- (right, down) of visible area
         -- Colors
         background :: Background,        -- Background colors
         colors     :: [SymbolColor s v], -- Symbol to color mapping
         generator  :: StdGen,            -- Rand. number generator for colors
         -- Mouse zoom
-        mouse_use  :: Bool,              -- Box selection active
-        init_pos   :: Position,          -- (left, up) box
-        cur_pos    :: Position,          -- (right, down) box
+        mouseUse   :: Bool,              -- Box selection active
+        initPos    :: Position,          -- (left, up) box
+        curPos     :: Position,          -- (right, down) box
         -- Textures
-        node_tex   :: TextureObject,     -- Node texture
-        sym_font   :: Font               -- Font texture
+        nodeTex    :: TextureObject,     -- Node texture
+        symFont    :: Font               -- Font texture
       }
 
 type EnvironmentRef s v r = IORef (Environment s v r)
 
 -- Initialize the environment
-init_environment :: RewriteSystem s v r
+initEnvironment :: RewriteSystem s v r
     => CReduction s v r -> FilePath -> FilePath -> Int -> Size -> GLdouble
        -> GLdouble -> IO (IORef (Environment s v r))
-init_environment red n_file f_file f_scale w_size vis_width vis_height = do
+initEnvironment red n_file f_file f_scale w_size vis_width vis_height = do
     -- Initialize node texture
     node <- loadImageTexture n_file
 
@@ -99,17 +100,17 @@ init_environment red n_file f_file f_scale w_size vis_width vis_height = do
 
     -- Initialize environment
     newIORef Env {
-        env_red    = red,
-        red_list   = Nothing,
-        win_size   = w_size,
-        vis_lu     = (0.0, 0.0),
-        vis_rd     = (vis_width, vis_height),
+        envRed     = red,
+        redList    = Nothing,
+        winSize    = w_size,
+        visLU      = (0.0, 0.0),
+        visRD      = (vis_width, vis_height),
         background = Black,
         colors     = [],
         generator  = gen,
-        mouse_use  = False,
-        init_pos   = Position 0 0,
-        cur_pos    = Position 0 0,
-        node_tex   = node,
-        sym_font   = font
+        mouseUse   = False,
+        initPos    = Position 0 0,
+        curPos     = Position 0 0,
+        nodeTex    = node,
+        symFont    = font
         }

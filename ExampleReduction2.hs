@@ -1,5 +1,5 @@
 {-
-Copyright (C) 2011 Jeroen Ketema
+Copyright (C) 2011, 2012 Jeroen Ketema
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
@@ -16,12 +16,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -}
 
 module ExampleReduction2 (
-    c_reduction
+    cReduction
 ) where
 
 -- This file defines a reduction that can be tried with the visualization code.
 --
--- The reduction is defined through make_dynamic from DynamicReduction.
+-- The reduction is defined through makeDynamic from DynamicReduction.
 
 import RuleAndSystem
 import Term
@@ -31,22 +31,24 @@ import DynamicReduction
 import ExampleTermsAndSubstitutions
 import ExampleRulesAndSystems
 
+import Prelude
+
 -- Term.
-h_f_f_omega :: Term_Sigma_Var
-h_f_f_omega = function_term h [f_omega, f_omega]
+h_f_f_omega :: Term Sigma Var
+h_f_f_omega = functionTerm h [f_omega, f_omega]
 
 -- Reduction.
 reduction' :: OmegaReduction Sigma Var System_a_f_x
-reduction' = RCons (construct_sequence terms) (construct_sequence steps)
-    where terms = rewrite_steps h_f_f_omega steps
+reduction' = RCons (constructSequence terms) (constructSequence steps)
+    where terms = rewriteSteps h_f_f_omega steps
           steps = zip ps rs
           ps = [2] : map (\p -> p ++ [1, 1]) ps
           rs = repeat rule_f_x_to_g_x
 
-c_reduction' :: CReduction Sigma Var System_a_f_x
-c_reduction' = CRCons reduction' (construct_modulus phi)
+cReduction' :: CReduction Sigma Var System_a_f_x
+cReduction' = CRCons reduction' (constructModulus phi)
     where phi n = n + 1
 
 -- Conversion to a DynamicReduction.
-c_reduction :: DynamicReduction
-c_reduction = make_dynamic c_reduction'
+cReduction :: DynamicReduction
+cReduction = makeDynamic cReduction'
