@@ -33,10 +33,6 @@ import ExampleRulesAndSystems
 
 import Prelude
 
--- Term.
-h_f_f_omega :: Term Sigma Var
-h_f_f_omega = functionTerm h [f_omega, f_omega]
-
 -- Reduction.
 reduction' :: OmegaReduction Sigma Var System_a_f_x
 reduction' = RCons (constructSequence terms) (constructSequence steps)
