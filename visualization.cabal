@@ -17,7 +17,7 @@ Executable visualization
     Build-Depends:
         array,
         base == 4.*,
-        bitmap == 0.0.2,
+        bitmap-opengl == 0.0.0.1,
         directory,
         filepath,
         FTGL == 1.333,

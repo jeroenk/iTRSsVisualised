@@ -62,17 +62,13 @@ The program has a number dependencies (where the version numbers are the
 versions tested with):
 
 * plugins 1.5.3.0
-* bitmap 0.0.2
+* bitmap-opengl 0.0.0.1
 * stb-image 0.2.1
 * FTGL 1.333
 
 All dependencies can be obtained through Hackage:
 
   http://hackage.haskell.org/
-
-In addition, a working copy of bitmap-opengl must be present, which is
-currently not available through Hackage. A working copy can be created
-by downloading version 0.0.0 and updating the first import to Data.Bitmap.
 
 Possible Future Extensions
 --------------------------
