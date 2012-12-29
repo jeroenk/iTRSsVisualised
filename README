@@ -9,6 +9,38 @@ Compiler (GHC). To obtain GHC, it is best to install the Haskell Platform:
 
   http://hackage.haskell.org/platform/
 
+Installation
+------------
+
+The sources should be put in a subdirectory of the code from:
+
+  https://github.com/jeroenk/iTRSsImplemented.git
+
+Next, the program can be compiled with:
+
+  ./Setup.lhs configure
+  ./Setup.lhs build
+
+Depending on the installation location of the dependencies (see below) --user
+may have to be passed to configure.
+
+After compilation a copy of the program can be found in the source directory.
+
+Dependencies
+------------
+
+The program has a number dependencies (where the version numbers are the
+versions tested with):
+
+* plugins 1.5.3.0
+* bitmap-opengl 0.0.0.1
+* stb-image 0.2.1
+* FTGL 1.333
+
+All dependencies can be obtained through Hackage:
+
+  http://hackage.haskell.org/
+
 Usage
 -----
 
@@ -39,39 +71,8 @@ left cursor key    : move left
 left mouse button  : select zoom area
 right mouse button : change background color
 
-Compilation
------------
-
-The program can be compiled with:
-
-  ./Setup.lhs configure
-  ./Setup.lhs build
-
-Depending on the installation location of the dependencies --user may have to
-be passed to configure.
-
-After compilation a copy of the program can also be found in the source
-directory. Optionally, the program can be installed with:
-
-  ./Setup.lhs install
-
-Dependencies
-------------
-
-The program has a number dependencies (where the version numbers are the
-versions tested with):
-
-* plugins 1.5.3.0
-* bitmap-opengl 0.0.0.1
-* stb-image 0.2.1
-* FTGL 1.333
-
-All dependencies can be obtained through Hackage:
-
-  http://hackage.haskell.org/
-
-Possible Future Extensions
---------------------------
+Possible Extensions
+-------------------
 
 * Zooming by means of the mouse scroll wheel (this would require freeglut)
 * Dialog for selecting reductions (this would require a substantial rewrite
